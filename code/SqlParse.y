@@ -35,8 +35,11 @@ import Error (errorComOpen,errorComClose)
      AND              {TAnd}
      OR               {TOr}
      '='              {TEqual}
+     "<>"             {TNotEq}
      '>'              {TGreat}
      '<'              {TLess}
+     ">="             {TGrOrEq}
+     "<="             {TLsOrEq}
      LIKE             {TLike}
      EXIST            {TExist}
      NOT              {TNot}
@@ -49,6 +52,7 @@ import Error (errorComOpen,errorComClose)
      Asc              {TAsc}
      Desc             {TDesc}
      ALL              {TAll}
+     COLUMN           {TColumn}
      '('              {TOpen}
      ')'              {TClose}
      ','              {TComa}
@@ -111,6 +115,7 @@ import Error (errorComOpen,errorComClose)
 
 %nonassoc SET WHERE
 %left NOT
+%left JOIN
 %nonassoc BoolExp
 %left OR AND
 %right ','
@@ -121,6 +126,7 @@ import Error (errorComOpen,errorComClose)
 %left '+' '-'
 %left '*' '/'
 %left NEG
+%left UNION DIFF INTERSECT
 %%
 
 
@@ -136,9 +142,9 @@ SQL :   DML {S1 $1}
 
 
 MANUSERS :: {ManUsers}
-MANUSERS : CUSER FIELD FIELD {CUser $2 $3}
-         | DUSER FIELD FIELD {DUser $2 $3}
-         | SUSER FIELD FIELD {SUser $2 $3}
+MANUSERS : CUSER FIELD {CUser $2}
+         | DUSER FIELD {DUser $2}
+         | SUSER FIELD {SUser $2}
 
 {--------------------------------}
 
@@ -168,23 +174,20 @@ Query2  : FROM ArgF Query3    {From $2 $3}
        | Query3 {$1}
 
 
-Query3 : SomeJoin JOIN FieldList ON Var '=' Var  Query4 {Join $1 (map (\x -> Field x) $3) (Equal $5 $7) $8}
-       | Query4 {$1}
+Query3 : WHERE BoolExpW Query4 {Where $2 $3}
+      | Query4 {$1}
 
-Query4 : WHERE BoolExpW Query5 {Where $2 $3}
+Query4 : GROUPBY ArgF Query5 {GroupBy $2 $3}
       | Query5 {$1}
 
-Query5 : GROUPBY ArgF Query6  {GroupBy $2 $3}
+Query5 : HAVING BoolExpH Query6 {Having $2 $3}
       | Query6 {$1}
 
-Query6 : HAVING BoolExpH Query7 {Having $2 $3}
+
+Query6 : ORDERBY VarList Order Query7   {OrderBy $2 $3 $4}
       | Query7 {$1}
 
-
-Query7 : ORDERBY ArgF Order Query8   {OrderBy $2 $3 $4}
-      | Query8 {$1}
-
-Query8 : LIMIT NUM  {Limit $2 End}
+Query7 : LIMIT NUM  {Limit $2 End}
        | {End}
 
 
@@ -195,8 +198,8 @@ ArgS :: {[Args]}
 Exp  :: {Args}
      : FIELD {Field $1}
      | Aggregate {A2 $1}
-     | Exp AS FIELD {As $1 (Field $3)}
-     | '(' Query1')' AS FIELD {As (Subquery $2) (Field $5)}
+     | Exp AS FIELD {As $1 $3}
+     | '(' Query0')' AS FIELD {As (Subquery $2) $5}
      | FIELD'.'FIELD {Dot $1 $3}
      | IntExp {$1}
      | ALL {All}
@@ -212,11 +215,26 @@ IntExp :: {Args}
        | NUM         {A3 $1}
 
 
+
+-- Argumentos para claúsula FROM
 ArgF :: {[Args]}
-     : FIELD {[Field $1]}
-     | FIELD AS FIELD   {[As (Field $1) (Field $3)]}
+     : ArgF2 {[$1]}
      | ArgF ',' ArgF    {$1 ++ $3}
-     | '('Query')' AS FIELD {[As (Subquery $2) (Field $5)]}
+
+-- Para obtener tablas tenemos 3 opciones:
+-- Dar el nombre
+-- Hacer una consulta anidada
+-- Relacionar 2 tablas mediante la claúsula JOIN
+
+
+ArgF2 :: {Args}
+      : '('ArgF2')' {$2}
+      |  ArgF2  AS FIELD   {As $1 $3}
+      | ArgF2 COLUMN FieldList AS FieldList {ColAs $1 $3 $5}
+      | FIELD {Field $1}
+      | '('Query0')' {Subquery $2}
+      | ArgF2 SomeJoin JOIN ArgF2 ON Var '=' Var {Join $2 $1 $4 (Equal $6 $8)}
+
 
 
 Fields :: {[Args]}
@@ -228,8 +246,11 @@ BoolExpW :: {BoolExp}
          | '(' BoolExpW ')'          {$2}
          | BoolExpW OR  BoolExpW     {Or $1 $3}
          | ValueW '=' ValueW         {Equal $1 $3}
+         | ValueW "<>" ValueW        {NotEq $1 $3}
          | ValueW '>' ValueW         {Great $1 $3}
+         | ValueW ">="  Value        {GrOrEq $1 $3}
          | ValueW '<' ValueW         {Less $1 $3}
+         | ValueW "<="  Value        {LsOrEq $1 $3}
          | NOT BoolExpW              {Not $2}
          | EXIST '(' Query ')'       {Exist $3}
          | Var LIKE STR              {Like $1 $3}
@@ -242,7 +263,10 @@ BoolExpH :: {BoolExp}
          | '(' BoolExpH ')'          {$2}
          | BoolExpH OR  BoolExpH     {Or $1 $3}
          | ValueH '=' ValueH         {Equal $1 $3}
+         | ValueH "<>" ValueH        {NotEq $1 $3}
+         | ValueH ">="  Value        {GrOrEq $1 $3}
          | ValueH '>' ValueH         {Great $1 $3}
+         | ValueH "<="  Value        {LsOrEq $1 $3}
          | ValueH '<' ValueH         {Less $1 $3}
          | NOT BoolExpH              {Not $2}
          | EXIST '(' Query ')'       {Exist $3}
@@ -260,9 +284,22 @@ ValueW :: {Args}
        | Value {$1}
 
 
+
+
+VarList :: {[Args]}
+        : Var {[$1]}
+        | VarList ',' VarList {$1 ++ $3}
+
+
+
+
 Var :: {Args}
        : FIELD         {Field $1}
        | FIELD'.'FIELD {Dot $1 $3}
+
+
+
+
 
 Value :: {Args}
        : STR                      {A1 $1}
@@ -407,9 +444,12 @@ data Token =   TCUser
              | TOrderBy
              | TAnd
              | TOr
+             | TNotEq
              | TEqual
              | TGreat
+             | TGrOrEq
              | TLess
+             | TLsOrEq
              | TLike
              | TIn
              | TNot
@@ -422,6 +462,7 @@ data Token =   TCUser
              | TAvg
              | TSemiColon
              | TField String
+             | TColumn
              | TAsc
              | TDesc
              | TAll
@@ -495,6 +536,10 @@ lexer cont  s = case s of
          ('U':'N':'I':'O':'N':xs) -> \(s1,s2) -> cont TUnion xs (s1,5 + s2)
          ('I':'N':'T':'E':'R':'S':'E':'C':'T':xs) -> \(s1,s2) -> cont TIntersect xs (s1,9 + s2)
          ('D':'I':'F':'F':xs) -> \(s1,s2) -> cont TDiff xs (s1,5 + s2)
+         ('O':'R':'D':'E':'R':' ':'B':'Y':xs) -> \(s1,s2) -> cont TOrderBy xs (s1,8 + s2)
+         ('A':'S':'C':xs) -> \(s1,s2) ->  cont TAsc xs (s1,3 + s2)
+         ('D':'E':'S':'C':xs) -> \(s1,s2) ->  cont TDesc xs (s1,4 + s2)
+
 
          ('A':'N':'D':xs) -> \(s1,s2) ->  cont TAnd xs (s1,3 + s2)
          ('O':'R':xs) ->  \(s1,s2) ->  cont TOr xs (s1,2 + s2)
@@ -503,7 +548,10 @@ lexer cont  s = case s of
          ('E':'X':'I':'S':'T':xs) -> \(s1,s2) ->  cont TExist xs (s1,5 + s2)
          ('I':'N':xs) -> \(s1,s2) ->  cont TIn xs (s1,2 + s2)
          ('G':'R':'O':'U':'P':' ':'B':'Y':xs) -> \(s1,s2) ->  cont TGroupBy xs (s1,8 + s2)
+         ('<':'>':xs) -> \(s1,s2) -> cont TNotEq xs (s1,2 + s2)
          ('=':xs) -> \(s1,s2) ->  cont TEqual xs (s1,1 + s2)
+         ('>':'=':xs) -> \(s1,s2) ->  cont TGrOrEq xs (s1,2 + s2)
+         ('<':'=':xs) -> \(s1,s2) ->  cont TLsOrEq xs (s1,2 + s2)
          ('>':xs) -> \(s1,s2) ->  cont TGreat xs (s1,1 + s2)
          ('<':xs) -> \(s1,s2) ->  cont TLess xs (s1,1 + s2)
 
@@ -518,8 +566,6 @@ lexer cont  s = case s of
          ('N':'E':'G':xs) -> \(s1,s2) ->  cont TNeg xs (s1,3 + s2)
 
 
-         ('A':'s':'c':xs) -> \(s1,s2) ->  cont TAsc xs (s1,3 + s2)
-         ('D':'e':'s':'c':xs) -> \(s1,s2) ->  cont TDesc xs (s1,4 + s2)
 
          ('C':'R':'E':'A':'T':'E':' ':'T':'A':'B':'L':'E':xs) -> \(s1,s2) ->  cont TCTable xs (s1,12 + s2)
          ('C':'R':'E':'A':'T':'E':' ':'D':'A':'T':'A':'B':'A':'S':'E':xs) -> \(s1,s2) -> cont TCBase xs (s1,14 + s2)
@@ -547,6 +593,7 @@ lexer cont  s = case s of
          ('C':'A':'S':'C':'A':'D':'E':xs) -> \(s1,s2) -> cont TCascades xs (s1,7 + s2)
          ('N':'U':'L':'L':'I':'F':'I':'E':xs) -> \(s1,s2) -> cont TNullifies xs (s1,8 + s2)
          ('N':'U':'L':'L':xs) -> \(s1,s2) -> cont TNull xs (s1,4 + s2)
+         ('C':'O':'L':'U':'M':'N':xs) -> \(s1,s2) -> cont TColumn xs (s1,6+ s2)
 
 
          ('D':'E':'L':'E':'T':'E':xs) -> \(s1,s2) ->  cont TDelete xs (s1,6 + s2)
@@ -557,7 +604,6 @@ lexer cont  s = case s of
          ('W':'H':'E':'R':'E':xs) -> \(s1,s2) -> cont TWhere xs (s1,5 + s2)
          ('G':'R':'O':'U':'P':' ':'B':'Y':xs) -> \(s1,s2) -> cont TGroupBy xs (s1,8 + s2)
          ('H':'A':'V':'I':'N':'G':xs) -> \(s1,s2) -> cont THaving xs (s1,6 + s2)
-         ('O':'R':'D':'E':'R':' ':'B':'Y':xs) -> \(s1,s2) -> cont TGroupBy xs (s1,8 + s2)
          ('L':'I':'M':'I':'T':xs) -> \(s1,s2) -> cont TLimit xs (s1, 5 + s2)
          ('O':'N':xs) -> \(s1,s2) -> cont TOn xs (s1,2 + s2)
 

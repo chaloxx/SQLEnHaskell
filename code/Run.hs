@@ -1,13 +1,13 @@
 module Run where
 import SqlParse (sqlParse)
-import AST
-import DdlFunctions (createTable,dropTable,showTable,createDataBase,dropDataBase)
+import AST (Env(..),DDL(..),DML(..),ManUsers(..),SQL(..),ParseResult(..))
+import DdlFunctions (createTable,dropTable,showTable,createDataBase,dropDataBase,showDataBase)
 import DmlFunctions
 import Url
 import System.TimeIt
 import Control.Exception
 import Data.List (isSuffixOf,dropWhileEnd,nub,sort)
-import Error (errorSource,errorOpen,errorSelUser,errorSelBase)
+import Error (errorSource,errorOpen,errorSelUser,errorSelBase,put)
 import UserFunctions
 import DynGhc (appendLine)
 import qualified Data.HashMap.Strict as H
@@ -17,7 +17,7 @@ import System.Directory (doesDirectoryExist,doesFileExist,listDirectory)
 -- Parsear comando
 parseCmd :: Env ->  String -> IO (Env)
 parseCmd e s = case sqlParse s of
-                Failed msg -> do putStrLn $ (source e) ++ ":" ++ msg
+                Failed msg -> do put $ (source e) ++ ":" ++ msg
                                  return e
                 Ok cmd ->  runSql e cmd
 
@@ -30,7 +30,7 @@ runSql e (S3 cmd) = runManUser e cmd
 runSql e (Seq cmd1 cmd2) = do e' <- runSql e cmd1
                               runSql e' cmd2
 runSql e (Source p) = if ".sql" `isSuffixOf` p then read (Env (name e) (dataBase e) p) p `catch` exception p e
-                      else do putStrLn errorSource
+                      else do put errorSource
                               return e
 
  where read e p = do s <- readFile p
@@ -40,7 +40,7 @@ runSql e (Source p) = if ".sql" `isSuffixOf` p then read (Env (name e) (dataBase
 
 
        exception p e r = do let err = show (r :: IOException)
-                            putStrLn $ errorOpen p err
+                            put $ errorOpen p err
                             return e
        -- Eliminar saltos de linea y espacios iniciales y finales
        process s = let s' =  dropWhileEnd f s in
@@ -50,18 +50,18 @@ runSql e (Source p) = if ".sql" `isSuffixOf` p then read (Env (name e) (dataBase
 
 
 
--- Ejecutar funciones de administración
+-- Funciones de usuario
 runManUser :: Env -> ManUsers ->  IO (Env)
-runManUser e (CUser u p) = do createUser u p;return e
-runManUser e (SUser u p) = selectUser (source e) u p
-runManUser e (DUser u p) = do deleteUser u p;return e
+runManUser e (CUser u) = do createUser u;return e
+runManUser e (SUser u) = selectUser (source e) u
+runManUser e (DUser u) = deleteUser e u
 
 
 
 -- Ejecuta un comando DDL
 runDdl :: Env -> DDL -> IO (Env)
 runDdl e cmd = if checkSelectUser e then runDdl1 e cmd
-               else  do putStrLn errorSelUser
+               else  do put errorSelUser
                         return e
 
 runDdl1 e cmd = case cmd of
@@ -70,13 +70,13 @@ runDdl1 e cmd = case cmd of
   (DTable t) -> runDdl2 e $ dropTable e t
   (CTable n c) -> runDdl2 e $  createTable e n c
   (Use b) -> do v <- doesDirectoryExist (url (name e) b)
-                if v then do putStrLn $ "Usando la base " ++ b
+                if v then do put $ "Usando la base " ++ b
                              return (Env (name e) b (source e))
-                else do putStrLn $ "La base " ++ b ++ " no existe"
+                else do put $ "La base " ++ b ++ " no existe"
                         return e
 
 
-  (ShowB) -> do printDirectory $ "DataBase/" ++ (name e)
+  (ShowB) -> do showDataBase e
                 return e
 
   (ShowT) -> do showTable e
@@ -88,7 +88,7 @@ runDdl1 e cmd = case cmd of
                      return e
 
 runDdl2 e f = do if checkSelectBase e then f
-                 else putStrLn errorSelBase
+                 else put errorSelBase
                  return e
 
 
@@ -99,8 +99,8 @@ runDdl2 e f = do if checkSelectBase e then f
 runDml :: Env -> DML -> IO (Env)
 runDml e dml = let (b1,b2) = (checkSelectBase e ,checkSelectUser e) in
                if b1 && b2 then do runDml2 e dml;return e
-               else do if b1 then putStrLn  errorSelUser
-                       else putStrLn errorSelBase;
+               else do if b1 then put  errorSelUser
+                       else put errorSelBase;
                        return e
 
 
@@ -138,5 +138,5 @@ checkTable r = do b <- doesFileExist (r ++ ".hs")
 printDirectory :: FilePath -> IO ()
 printDirectory p = do l <- listDirectory p
                       let l' = sort $ nub $ map quitExtension l
-                      sequence_ (map putStrLn l' )
+                      sequence_ (map put l' )
   where quitExtension s = takeWhile (\x -> x /= '.') s

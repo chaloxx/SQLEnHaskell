@@ -140,7 +140,7 @@
   (major1) == 2 && (major2) <  30 || \
   (major1) == 2 && (major2) == 30 && (minor) <= 0)
 
-#define CURRENT_COMPONENT_ID "AST-0.1.0.0-74bzLWpinTs7HYMwmYB71G"
+#define CURRENT_COMPONENT_ID "AST-0.1.0.0-CUZufLCB6IDAawcE0498xS"
 
-#define CURRENT_PACKAGE_KEY "AST-0.1.0.0-74bzLWpinTs7HYMwmYB71G"
+#define CURRENT_PACKAGE_KEY "AST-0.1.0.0-CUZufLCB6IDAawcE0498xS"
 

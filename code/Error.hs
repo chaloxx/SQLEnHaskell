@@ -1,43 +1,14 @@
 module Error where
+
 import Data.HashMap.Strict hiding (foldr,map)
-import AST
+import AST (Env(..),Args(..),ParseResult(..),show2)
 import Prelude hiding (lookup,fail)
-import Data.Typeable
-import Avl ((|||),isMember)
+import Patterns ((|||))
+import Avl (isMember)
 import Data.Either
+import Utilities (fold,fold')
 
-printError :: String -> IO ()
-printError msg = error msg
-
-
-errorMsg = "Nombre de usuario inválido"
-errorMsg2 = "No existe el usuario"
-
-
-combineEither :: Monoid a => (b -> c -> e) -> Either a b -> Either a c -> Either a e
-combineEither op a b = case a of
-                        Right x -> case b of
-                                     Right y -> return $ op x y
-                                     Left y -> Left y
-                        Left x -> Left x
-
-
-
-errorField1 x = Left (x ++ " no es un atributo válido\n")
-errorField2 x t1 t2 = x ++ " tiene tipo " ++ (show t1) ++ " ,se esperaba tipo " ++ (show t2) ++ "\n"
-
-
-
-typeOfArgs :: Args -> Type
-typeOfArgs (A1 _) = String
-typeOfArgs (A3 _) = Int
-typeOfArgs (A4 _) = Float
-typeOfArgs (A5 _) = Datetime
-typeOfArgs (A6 _) = Dates
-typeOfArgs (A7 _) = Tim
-
-
-
+-- Módulo para errores y otras utilidades
 
 errorPi s = retFail  ("Atributos " ++ show s ++
                    " inválidos en SELECT" )
@@ -71,6 +42,8 @@ errorEvalBool s = fail $ "Atributo " ++ s " inválido"
 
 errorFind s = fail $ "No se pudo encontrar el atributo " ++ s
 
+errorIndFields = fail "La búsqueda debe ser sobre una columna"
+
 typeError e = fail $ "Error de tipo en la expresion " ++ e ++ "\n"
 
 divisionError = fail $ "División por cero"
@@ -85,11 +58,10 @@ errorSelUser = "Primero debe seleccionar un usuario..."
 
 errorSelBase = "Primero debe seleccionar una base de datos..."
 
-welcome u s = do putStrLn $  "Bienvenido " ++ u ++ "!"
-                 return (Env u "" s)
+welcome u = putStrLn $  "Bienvenido " ++ u ++ "!"
 
-logError u s = do put $ "No existe el usuario " ++ u  ++ " o la contraseña es incorrecta "
-                  return (Env "" "" s)
+logError u = put $ "No existe el usuario " ++ u
+
 
 baseExist b = put $ "Ya existe la base " ++ b
 baseNotExist b = put $ "No existe la base " ++ b
@@ -98,13 +70,16 @@ notLog = put "No estás logueado"
 
 invalidData = put "Los datos son incorrectos"
 
-nameAlreadyExist u = put $ "El nombre " ++ u ++ " ya está en uso"
+userAlreadyExist u = put $ "El usuario " ++ u ++ " ya existe"
 
 errorComClose = Failed $ "Error de clausura de comentario"
 
 errorComOpen =  Failed $ "Error de apertura de comentario"
 
-errorForeignKey s = fail $ "El valor referenciado " ++ (show s) ++ " no existe"
+--errorForeignKey s = fail $ "El valor referenciado " ++ (show s) ++ " no existe"
+
+errorForeignKey v s = fail $ "(" ++ fold v ++ ")" ++ " no existe en " ++ s
+
 
 errorCreateTableKeyOrFK = put "El esquema no posee una clave o la clave foránea no es parte del esquema"
 
@@ -145,45 +120,23 @@ errorSet3 = fail "Atributos con tipos incompatibles"
 
 errorLike = fail "Los argumentos de Like deben ser strings"
 
+errorJoin ls = retFail $ "Ambigüedad en los atributos " ++ (foldl (\ x y -> x ++ "," ++ y) "" ls)
+
+errorColAs = retFail "Error en los argumentos de COL AS"
+
+-- Indicar error
 fail = Left
+
 retFail :: String ->  IO(Either String b)
 retFail = return.fail
 
+
+
+-- Imprimir
 put = putStrLn
 
 
+-- Indicar que todo anduvo bien
 ok = Right
 retOk :: a -> IO(Either String a)
 retOk = return.ok
-
-exitToInsert :: [Args] -> Either String String
-exitToInsert s = return $  (fold s) ++ " se inserto correctamente"
-
-
-fold :: [Args] -> String
-fold s = tail $ fold' $ map show2 s
-fold' = foldl (\ x y -> x ++ "," ++ y) ""
-
-msg = "Error buscando el objeto"
-
--- Realiza una busqueda en g a partir de una lista y:ys y  v
-lookupList ::Show b => HashMap String (HashMap String b) -> [String] -> String -> Either String b
-lookupList _ [] v = errorFind v
-lookupList g q@(y:ys) v = case lookup y g of
-                           Nothing -> error $ show g
-                           Just r -> case lookup v r of
-                                      Nothing -> lookupList g ys v
-                                      Just x' -> return x'
-
--- Unir 2 listas, sin elementos repetidos en ambas
-unionL :: Eq e => [e] -> [e] -> [e]
-unionL [] l = l
-unionL (x:xs) l = if x `elem` l then unionL xs l
-                  else unionL xs (x:l)
-
-
-
-
-syspath = "DataBase/system/"
-userpath = syspath++"Users"
-tablepath = syspath++"Tables"

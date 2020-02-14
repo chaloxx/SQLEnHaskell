@@ -3,6 +3,8 @@ import System.Console.Readline
 import Run (parseCmd,checkSelectUser)
 
 
+-- Módulo inicial
+
 main :: IO ()
 main = main' (Env "" "" "Estándar Input")
 

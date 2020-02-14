@@ -14,6 +14,13 @@
   (major1) == 0 && (major2) <  1 || \
   (major1) == 0 && (major2) == 1 && (minor) <= 0)
 
+/* package Patterns-0.1.0.0 */
+#define VERSION_Patterns "0.1.0.0"
+#define MIN_VERSION_Patterns(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  1 || \
+  (major1) == 0 && (major2) == 1 && (minor) <= 0)
+
 /* package base-4.9.1.0 */
 #define VERSION_base "4.9.1.0"
 #define MIN_VERSION_base(major1,major2,minor) (\
@@ -105,7 +112,7 @@
   (major1) == 2 && (major2) <  30 || \
   (major1) == 2 && (major2) == 30 && (minor) <= 0)
 
-#define CURRENT_COMPONENT_ID "Avl-Tree-0.1.0.0-BjG4pOi43DC8ejS8kGvgfa"
+#define CURRENT_COMPONENT_ID "Avl-Tree-0.1.0.0-6D7ddk4duq65ObYyQ6tdUC"
 
-#define CURRENT_PACKAGE_KEY "Avl-Tree-0.1.0.0-BjG4pOi43DC8ejS8kGvgfa"
+#define CURRENT_PACKAGE_KEY "Avl-Tree-0.1.0.0-6D7ddk4duq65ObYyQ6tdUC"
 

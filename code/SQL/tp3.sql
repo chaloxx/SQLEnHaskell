@@ -118,9 +118,12 @@ WHERE EXISTS( SELECT * FROM PrefiereZona WHERE  nombre_zona = "Norte" AND nombre
 
 /*d*/
 SELECT DISTINCT nombre
-FROM Persona JOIN (SELECT vendedor FROM (SELECT codigo FROM Persona JOIN PrefiereZona ON codigo = codigo_cliente WHERE nombre_poblacion = "Rosario" AND nombre_zona = "Centro") AS s1 JOIN Cliente ON s1.codigo = Cliente.codigo ) AS s2
+FROM Persona
+   INNER JOIN (SELECT vendedor FROM (SELECT codigo FROM Persona JOIN PrefiereZona ON codigo = codigo_cliente WHERE nombre_poblacion = "Rosario" AND nombre_zona = "Centro") AS s1
+   INNER JOIN Cliente ON s1.codigo = Cliente.codigo ) AS s2
              ON vendedor = codigo ;
 
+SELECT * FROM Persona JOIN (PrefiereZona ON codigo = codigo_cliente) AS S1;
 
 /*e*/
 SELECT nombre FROM Persona JOIN (SELECT vendedor FROM Cliente WHERE codigo IN (SELECT vendedor FROM Cliente)) AS s1 ON codigo = vendedor;
@@ -163,9 +166,12 @@ WHERE  Persona.codigo = PrefiereZona.codigo_cliente and /*Zonas preferidas*/
 
 
 
+                                                                      SELECT Inmueble.codigo FROM PrefiereZona,Inmueble
+                                                                      WHERE        NOT EXISTS (SELECT * FROM Visitas WHERE
+                                                                                       Visitas.codigo_inmueble = Inmueble.codigo)
 
 
-, Inmueble.codigo, Inmueble.nombre_zona, Inmueble.precio
+
 
 
 

@@ -1,8 +1,9 @@
 module Check where
 
-import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,TabTypes,ForeignKey,Env,TableDescript(..),RefOption(..),(////),Types
-            ,show2)
-import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,lookupList,errorForeignKey,ok)
+import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,TabTypes,ForeignKey,Env,TableInfo(..),RefOption(..),Types,show2,TableName)
+import Patterns ((////))
+import Utilities (typeOfArgs,fold,lookupList,exitToInsert)
+import Error (errorKey,typeError,errorForeignKey,ok)
 import Data.HashMap.Strict hiding (map)
 import Avl (isMember)
 import System.IO.Unsafe (unsafePerformIO)
@@ -76,6 +77,9 @@ checkTypeBoolExp e@(Or exp1 exp2) s types = checkTypeBoolExp'' exp1 exp2 s types
 checkTypeBoolExp e@(Less exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
 checkTypeBoolExp e@(Great exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
 checkTypeBoolExp e@(Equal exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
+checkTypeBoolExp e@(NotEq exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
+checkTypeBoolExp e@(GrOrEq exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
+checkTypeBoolExp e@(LsOrEq exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
 checkTypeBoolExp _ _ _ = return Bool
 
 checkTypeBoolExp'' exp1 exp2 s types e  = do (t1,t2) <- checkTypeBoolExp exp1 s types //// checkTypeBoolExp exp2 s types
@@ -111,7 +115,9 @@ checkTypeExp s g (Field v) = lookupList g s v
 checkTypeExp s g (Dot s1 s2) = lookupList g [s1] s2
 checkTypeExp s g (Negate exp) = checkTypeExp s g exp
 checkTypeExp s g (Brack exp) = checkTypeExp s g exp
+checkTypeExp s g (As (Subquery dml) _) = return Float
 checkTypeExp s g (As exp _) = checkTypeExp s g exp
+
 
 -- (segundo nivel)
 checkTypeExp' s b g exp1 exp2 e =
@@ -129,13 +135,13 @@ checkTypeExp'' _ e = typeError $ (show e)
 
 
 -- Chequear que la clave foránea apunta a una clave existente
-checkForeignKey :: Env -> Reg -> [([(String,String)],Maybe Tab)] -> Either String String
+checkForeignKey :: Env -> Reg -> [([(String,String)],Maybe Tab,TableName)] -> Either String String
 checkForeignKey _ _ []  = return ""
-checkForeignKey _ _ ((_,Nothing):_) = fail "Error fatal"
-checkForeignKey e r ((xs,(Just t)):ys)  = let k = map (\(_,y) -> y) xs -- Obtener la key de t
-                                              r' = fromList $ map (\(x,y) -> (y,r ! x)) xs -- Existe la clave en t?
-                                          in if isMember k r' t then checkForeignKey e r ys
-                                             else error $ show r
+checkForeignKey _ _ ((_,Nothing,_):_) = fail "Error fatal"
+checkForeignKey e r ((xs,(Just t),m):ys)  = let k = map (\(_,y) -> y) xs -- Obtener la key de t
+                                                r' = fromList $ map (\(x,y) -> (y,r ! x)) xs
+                                            in if isMember k r' t then checkForeignKey e r ys -- Existe la clave en t?
+                                               else errorForeignKey (elems r') m
 
 
 

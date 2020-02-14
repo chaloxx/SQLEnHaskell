@@ -4,26 +4,28 @@ import Prelude hiding (catch,lookup)
 import System.Directory
 import Control.Exception
 import System.IO.Error hiding (catch)
-import AST (BaseName,CArgs (..),TableInf,Type,Env(..),TableDescript(..),Args,UserInfo(..),
-            Reference,ForeignKey,Tab,fields,fields2,fields3,createRegister,RefOption(..),printTable,show3)
+import Utilities (fields,fields2,fields3,createRegister,printTable,syspath,tablepath)
+import Patterns ((|||),(|||))
+import AST (BaseName,CArgs (..),TableInfo(..),Type,Env(..),Args,UserInfo(..),TableDescript,
+            Reference,ForeignKey,Tab,RefOption(..),show3)
 import DynGhc (compile)
-import Data.HashMap.Strict (fromList,HashMap,(!),update,lookup,alter,union,adjust)
+import Data.HashMap.Strict (fromList,HashMap,(!),update,lookup,alter,union,adjust,singleton,toList,mapWithKey)
 import Error (errorCreateTableKeyOrFK,tableExists,errorDropTable,succesDropTable,
               errorCreateReference,succesCreateTable,succesCreateReference,
-              errorCheckReference,put,imposibleDelete,errorCreateTableNulls, tableDoesntExist,syspath,
-              baseExist,baseNotExist,tablepath)
+              errorCheckReference,put,imposibleDelete,errorCreateTableNulls, tableDoesntExist,
+              baseExist,baseNotExist,errorSelBase)
 import Url
-import Avl ((|||),toTree,deleteT,c2,write,c,isMember,AVL,value,filterT,search,push)
+import Avl (toTree,deleteT,compareOrd,write,compareCOrd,isMember,AVL,value,filterT,search,push,toSortedTreeFromList,foldT)
 import DynGhc (appendLine,reWrite)
 import Data.List (elem)
-import DynGhc (obtainTable,loadInfoTable)
+import DynGhc (obtainTable,loadInfoTable,loadInfoUser)
 import Data.Maybe (isNothing,fromJust,isJust)
 import COrdering  (COrdering (..),fstByCC)
 import Check (checkReference, checkNullifies)
 import qualified Data.Set as Set (fromList,isSubsetOf)
 import Control.DeepSeq
 
-code :: String -> TableInf -> String
+code :: String -> TableDescript -> String
 code f (n,t,h,k,_) =   "module " ++ f ++ " where \n" ++
                        "import AST (Args (..),Type(..),TableDescript(..),Date(..),Time(..),DateTime(..))\n" ++
                        "import Data.Typeable\n" ++
@@ -94,37 +96,40 @@ dropDataBase b e = case name e of
                 in b /= b'
 
 
-fun reg x = fstByCC (\z1 z2 -> c2 ["userName"] z1 z2 ) reg x
+fun reg x = fstByCC (\z1 z2 -> compareOrd ["userName"] z1 z2 ) reg x
 
 
 
 createTable :: Env -> String -> [CArgs]  -> IO ()
 createTable e n c =
- do res <- obtainTable syspath "Tables" :: IO (Maybe (AVL (HashMap String TableDescript)))
+ do res <- obtainTable syspath "Tables" :: IO (Maybe (AVL (HashMap String TableInfo)))
     case res of
       Nothing -> putStrLn "Error Fatal al crear tabla"
       Just t -> do let reg = createRegister e n
-                    -- Existe alguna tabla?
+                    -- Ya existe la tabla?
                    if isMember fields reg t then tableExists n
-                   else do let (q@(scheme,types,nulls,k,fk),r) = collect c ||| url' e n
-                           let setFKNulls = toSet [x | (_,xs,s1,s2) <- fk,(x,_) <- xs,s1 == Nullifies || s2 == Nullifies ]
-                           let setNulls = toSet nulls
-                           let setScheme = toSet scheme
-                           let setKey = toSet k
-                           let setFKFields = toSet [x | (_,xs,_,_) <- fk,(x,_) <- xs]
-                           -- La clave y la clave foránea son parte del esquema?
-                           if isSubset setKey setNulls || (not $ isSubset setFKNulls setNulls) then errorCreateTableNulls
-                           else if k == [] || (not $ isSubset setKey setScheme) || ( not $ isSubset setFKFields  setScheme) then errorCreateTableKeyOrFK
-                                 else do b <- checkReference e fk (fromList $ zip scheme types) --- Chequeos de seguridad
-                                         if not b  then errorCheckReference
-                                         else do d1 <- createReference n e fk
-                                                 let hs = r ++ ".hs"
-                                                 d2 <- d1 `deepseq` writeFile hs $ code n q
-                                                 d2 `deepseq` compile hs
-                                                 removeFile $ r ++ ".hi"
-                                                 let t' = tree reg [TS scheme,TT types,TK k,TFK (splitFK fk), TR [],HN nulls]
-                                                 d3 <- appendLine tablepath t'
-                                                 d3 `deepseq` succesCreateTable n
+                   else case collect c of
+                         Left msg -> putStrLn msg
+                         Right q@(scheme,types,nulls,k,fk) ->
+                            do let r = url' e n
+                                   setFKNulls = Set.fromList [x | (_,xs,s1,s2) <- fk,(x,_) <- xs,s1 == Nullifies || s2 == Nullifies ]
+                                   setNulls = Set.fromList nulls
+                                   setScheme = Set.fromList scheme
+                                   setKey = Set.fromList k
+                                   setFKFields = Set.fromList [x | (_,xs,_,_) <- fk,(x,_) <- xs]
+                               -- La clave y la clave foránea son parte del esquema?
+                               if  setKey `Set.isSubsetOf` setNulls || (not $  setFKNulls `Set.isSubsetOf` setNulls) then errorCreateTableNulls
+                               else if k == [] || (not $ setKey `Set.isSubsetOf` setScheme) || ( not $ setFKFields `Set.isSubsetOf`  setScheme) then errorCreateTableKeyOrFK
+                                     else do b <- checkReference e fk (fromList $ zip scheme types) --- Chequeos de seguridad
+                                             if not b  then errorCheckReference
+                                             else do d1 <- createReference n e fk
+                                                     let hs = r ++ ".hs"
+                                                     d2 <- d1 `deepseq` writeFile hs $ code n q
+                                                     d2 `deepseq` compile hs
+                                                     removeFile $ r ++ ".hi"
+                                                     let t' = tree reg [TS scheme,TT types,TK k,TFK (splitFK fk), TR [],HN nulls]
+                                                     d3 <- appendLine tablepath t'
+                                                     d3 `deepseq` succesCreateTable n
 
 
 
@@ -132,8 +137,6 @@ createTable e n c =
 
   where tree reg l = toTree [union reg (fromList $ zip (drop 3 fields2) l)]
         splitFK f = [(x,xs) | (x,xs,_,_) <- f]
-        isSubset = Set.isSubsetOf
-        toSet = Set.fromList
 
 
 
@@ -155,7 +158,7 @@ createReference n e ((x,xs,o1,o2):ys) =
                     createReference n e ys
 
   where -- Función para actualizar el registro correspondiente en la tabla referenciada
-        fun m k r1 r2  = case c k r1 r2 of
+        fun m k r1 r2  = case compareCOrd k r1 r2 of
                             Eq y -> let f (TR l) = Just $ TR $ m:l
                                         in Eq $ update f "refBy" y
                             y -> y
@@ -168,7 +171,7 @@ createReference n e ((x,xs,o1,o2):ys) =
 
 
 dropTable :: Env -> String -> IO ()
-dropTable e n = do res <- obtainTable tablepath "Tables"
+dropTable e n = do res <- obtainTable syspath "Tables"
                    case res of
                      Nothing -> putStrLn "Error fatal"
                      Just t -> do inf <- loadInfoTable ["refBy","fkey"] e n
@@ -183,7 +186,7 @@ dropTable e n = do res <- obtainTable tablepath "Tables"
   dropTable' l e n t  =
               do t' <- removeReferences e t n l
                  let reg = createRegister e n
-                 case deleteT  (c2 fields reg) t' of
+                 case deleteT  (compareOrd fields reg) t' of
                    Nothing -> putStrLn $ errorDropTable n
                    Just t'' -> do reWrite t'' tablepath
                                   let r = url' e n
@@ -193,14 +196,14 @@ dropTable e n = do res <- obtainTable tablepath "Tables"
 
 
 -- Elimina todas las referencias hechas por la tabla n
-removeReferences :: Env -> AVL (HashMap String TableDescript) -> String -> [String] -> IO(AVL (HashMap String TableDescript))
+removeReferences :: Env -> AVL (HashMap String TableInfo) -> String -> [String] -> IO(AVL (HashMap String TableInfo))
 removeReferences _ t _ [] = return t
 removeReferences e t n (x:xs) = let reg = fromList $ zip fields [TO (name e), TB (dataBase e), TN x]
                                     t' = write (find n reg) t
                                 in removeReferences e t' n xs
 
           -- Se elimina la tabla n de la lista de referencias de la tabla x
-    where find x r1 r2 = case c fields r1 r2 of
+    where find x r1 r2 = case compareCOrd fields r1 r2 of
                         Eq _ -> Eq (change x r2)
                         other -> other
           -- modificar lista en hashmap de r2
@@ -209,29 +212,62 @@ removeReferences e t n (x:xs) = let reg = fromList $ zip fields [TO (name e), TB
 
 
 -- Procesa las columnas para separar la información pertinente
-collect :: [CArgs] -> TableInf
-collect [] = ([],[],[],[],[])
-collect((Col n t hn):xs) = let (l1,l2,l3,k,fk) = collect xs
-                          in -- Chequear si la columna admite nulos
-                             if hn then (n:l1,t:l2,n:l3,k,fk)
-                             else (n:l1,t:l2,l3,k,fk)
-collect ((PKey s):xs) = let (l1,l2,l3,k,fk) = collect xs
-                        in (l1,l2,l3,s++k,fk)
-collect ((FKey xs s ys o1 o2):rs) = let (l1,l2,l3,k,fk) = collect rs
-                                    in (l1,l2,l3,k,(s,zip xs ys,o1,o2):fk)
+collect :: [CArgs] -> Either String TableDescript
+collect [] = Right ([],[],[],[],[])
+collect((Col n t hn):xs) = do (l1,l2,l3,k,fk) <- collect xs
+                              -- Chequear si la columna admite nulos
+                              if hn then Right (n:l1,t:l2,n:l3,k,fk)
+                              else Right (n:l1,t:l2,l3,k,fk)
+collect ((PKey s):xs) = do (l1,l2,l3,k,fk) <- collect xs
+                           Right (l1,l2,l3,s++k,fk)
+collect ((FKey xs s ys o1 o2):rs) = do (l1,l2,l3,k,fk) <- collect rs
+                                       if length xs == length ys then Right (l1,l2,l3,k,(s,zip xs ys,o1,o2):fk)
+                                       else Left "Error al asignar clave foránea"
 
 
 -- Mostrar todas las tablas correspondientes a la actual base de datos
 showTable :: Env -> IO()
-showTable e = do res <- obtainTable syspath "Tables"  :: IO (Maybe (AVL (HashMap String TableDescript)))
-                 case res of
-                  Nothing -> putStrLn "Error fatal"
-                  Just t -> do let fields = ["owner","dataBase"]
-                               let reg = fromList $ zip fields  [TO (name e), TB (dataBase e)]
-                               let t' = filterT (aux fields reg) t
-                               printTable show3 ["tableName"] t'
+showTable e = if dataBase e == "" then put errorSelBase
+              else do res <- obtainTable syspath "Tables"  :: IO (Maybe (AVL (HashMap String TableInfo)))
+                      case res of
+                        Nothing -> putStrLn "Error fatal"
+                        Just t -> do let fields = ["owner","dataBase"]
+                                         reg = fromList $ zip fields  [TO (name e), TB (dataBase e)]
+                                         t' = filterT (aux fields reg) t
+                                     printTable show3 ["tableName"] t'
 
 
-   where aux fields r1 r2   = case c fields r1 r2 of
+   where aux fields r1 r2   = case compareCOrd fields r1 r2 of
                                 Eq _ -> True
                                 _ -> False
+
+
+showDataBase :: Env -> IO()
+showDataBase e = do [_,UB bases] <- loadInfoUser (name e)
+                    res <- obtainTable syspath "Tables" :: IO (Maybe (AVL (HashMap String TableInfo)))
+                    case res of
+                       Nothing -> put "Error fatal"
+                       Just t -> let info = fromList [(x,0) | x <- bases]
+                                     -- Para cada BD contar la cantidad de tablas asociadas
+                                     info' = foldT (func bases) info t
+                                     infoRegList = [union (singleton "dataBase" (Left k)) (singleton "cantTables" (Right v)) | (k,v) <- (toList info')]
+                                     k = ["dataBase","cantTables"]
+                                     t' = toSortedTreeFromList (compareCOrd k) infoRegList
+                                  in printTable showEither k t'
+
+
+             -- Función para fold
+       where func bases reg infoL infoR =  let infoLR = combine infoR infoL
+                                               (TO n) = reg ! "owner"
+                                           in if n == name e then let infoValue = fromList $ map (funBuilInfo reg) bases in
+                                                                      combine infoLR infoValue
+                                              else infoLR
+             -- Función para combinar info de izq y der
+             combine info1 info2 = mapWithKey (funSuma info1) info2
+             funSuma infoR k v  = v + (infoR ! k)
+             -- Función para map
+             funBuilInfo reg x = let (TB y) = reg ! "dataBase"
+                                 in if y == x then (x,1)
+                                    else (x,0)
+             -- Función para imprimir un either (observar que los eithers de t' tienen tipo Either String Int)
+             showEither = either id show

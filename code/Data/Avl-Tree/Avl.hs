@@ -2,26 +2,39 @@
 
 
 module Avl where
-import COrdering
+import COrdering (COrdering(..),sndCC)
 import Data.HashMap.Strict hiding (foldr,map,size,null,join,delete)
-import GHC.Exts
 import Prelude hiding (lookup)
 import Data.Maybe (isJust,fromJust)
 import Data.Int
 import Data.Bits((.&.),shiftR)
+import Patterns ((|||),(||||),pattern)
+
+
+-- Comparar 2 HashMaps (devuelve un COrdering)
+compareCOrd ::Ord v => [String] -> HashMap String v -> HashMap String v -> COrdering (HashMap String v)
+compareCOrd [] _ y = Eq y
+compareCOrd (k:ks) x y =  let (v1,v2) =  (lookup k x,lookup k y) in
+                if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
+                                                  LT -> Lt
+                                                  GT -> Gt
+                                                  EQ -> compareCOrd ks x y
+                else error $  "No se encontro el atributo " ++ (show k)
+
+-- Comparar 2 HashMaps (devuelve un Ordering)
+compareOrd :: Ord v => [String] -> HashMap String v -> HashMap String v -> Ordering
+compareOrd [] _ _ = EQ
+compareOrd (k:ks) x y  = let (v1,v2) =  (lookup k x,lookup k y) in
+                         if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
+                                                           EQ -> compareOrd ks x y
+                                                           res -> res
+                 else error "Error fatal"
+
+
 
 -- | A BinPath is full if the search succeeded, empty otherwise.
 data BinPath a = FullBP   Int a -- Found
                | EmptyBP  Int   -- Not Found
-
-
-(|||) :: a -> b -> (a,b)
-a ||| b = (a,b)
-
-
-
-
-
 
 
 data AVL e = E                      -- ^ Empty Tree
@@ -40,7 +53,7 @@ emptyT = E
 
 
 filterT :: (e -> Bool ) -> AVL e -> AVL e
-filterT f E = E
+filterT _ E = E
 filterT f t = let (bl,br) = filterT f (left t) ||| filterT f (right t)
                   r    = join bl br
               in case f (value t) of
@@ -48,13 +61,12 @@ filterT f t = let (bl,br) = filterT f (left t) ||| filterT f (right t)
                     False -> r
 
 
--- Dado un avl ordenado y uno  desordenado, mueve todos los elementos de t2
--- a t1 devolviendo un árbol ordenado
+-- Mover todos los elementos de t2 a t1 devolviendo un árbol ordenado
 mergeT :: (e -> e -> COrdering e) -> AVL e -> AVL e -> AVL e
-mergeT f t E = t
-mergeT f t t' = let t1 = mergeT f t (left t')
-                    t2 = mergeT f t1 (right t')
-               in push (f $ value t') (value t') t2
+mergeT f t1 E = t1
+mergeT f t1 t2 = let tL = mergeT f t1 (left t2)
+                     tR = mergeT f tL (right t2)
+               in push (f $ value t2) (value t2) tR
 
 
 
@@ -146,6 +158,11 @@ toTree (x:xs) = pushL x (toTree xs)
 toSortedTree :: Ord a => [a] -> AVL a
 toSortedTree [] = E
 toSortedTree (x:xs) = push (sndCC x) x (toSortedTree xs)
+
+toSortedTreeFromList :: (e -> e -> COrdering e) -> [e] -> AVL (e)
+toSortedTreeFromList _ [] = E
+toSortedTreeFromList f (x:xs) = let t = toSortedTreeFromList f xs
+                                in push (f x) x t
 
 
 sortedT :: (e -> e -> COrdering e) -> AVL e -> AVL e
@@ -698,50 +715,10 @@ spliceRNZ _ _ _    _ _ _  _   E              = error "spliceRNZ: Bug1"
 
 
 
-
-
-
--- Comparar 2 registros (devuelve un COrdering)
-c ::Ord v => [String] -> HashMap String v -> HashMap String v -> COrdering (HashMap String v)
-c [] _ y = Eq y
-c (k:ks) x y =  let (v1,v2) =  (lookup k x,lookup k y) in
-                if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
-                                                  LT -> Lt
-                                                  GT -> Gt
-                                                  EQ -> c ks x y
-                else error $  "No se encontro el atributo " ++ (show k)
-
--- Compara 2 registros (devuelve un Ordering)
-c2 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Ordering
-c2 [] _ _ = EQ
-c2 (k:ks) x y  = let (v1,v2) =  (lookup k x,lookup k y) in
-                 if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
-                                                  LT -> LT
-                                                  GT -> GT
-                                                  EQ -> c2 ks x y
-                 else error "Error fatal"
-
-
-
-
-
 m :: Ord v => [String] -> AVL (HashMap String v) -> AVL (HashMap String v) -> AVL (HashMap String v)
-m k = mergeT (c k)
+m k = mergeT (compareCOrd k)
 
 
--- Mapea un árbol  permitiendo devolver un error
-ioEitherMapT :: (e -> IO(Either a b)) -> AVL e -> IO(Either a (AVL b))
-ioEitherMapT f E = return $ Right E
-ioEitherMapT f t = do l' <- ioEitherMapT f (left t)
-                      r' <- ioEitherMapT f (right t)
-                      v'   <- f $ value t
-                      return $ do l'' <- l'
-                                  r'' <- r'
-                                  v <- v'
-                                  case t of
-                                   (N _ _ _) -> Right $ N l'' v r''
-                                   (Z _ _ _) -> Right $ Z l'' v r''
-                                   (P _ _ _) -> Right $ P l'' v r''
 
 
 
@@ -751,7 +728,7 @@ ioEitherMapT f t = do l' <- ioEitherMapT f (left t)
 -- Dados los atributos k y un registro x definido sobre los atributos k, chequea si x es parte de algún elemento del árbol t
 isMember :: Ord v => [String] -> HashMap String v -> AVL(HashMap String v) -> Bool
 isMember k _ E = False
-isMember k x t = case c k x  (value t) of
+isMember k x t = case compareCOrd k x  (value t) of
                       Eq _  -> True
                       Lt  -> isMember k x (left t)
                       Gt  -> isMember k x (right t)
@@ -763,8 +740,8 @@ repeatKey fields keys t = repeatKey' fields keys t E E
  where
  repeatKey' fields keys E t1 t2 =  (t1,t2)
  repeatKey' fields keys t t1 t2 = let v = value t
-                                      f1 = c keys v
-                                      f2 = c fields v
+                                      f1 = compareCOrd keys v
+                                      f2 = compareCOrd fields v
                                       (t1',t2') = if isMember keys v t2 then (push f2 v t1,t2)
                                                   else (t1,push f1 v t2)
                                       (t1'',t2'') =  repeatKey' fields keys (left t) t1' t2'
@@ -775,7 +752,7 @@ repeatKey fields keys t = repeatKey' fields keys t E E
 -- Hace una busqueda según los atributos k y los valores v y tal vez devuelve un registro
 search :: Ord v => [String] -> HashMap String v  -> AVL(HashMap String v) -> Maybe (HashMap String v)
 search k _ E = Nothing
-search k x t = case c k x (value t) of
+search k x t = case compareCOrd k x (value t) of
                  Eq v -> return v
                  Lt -> search k x (left t)
                  Gt -> search k x (right t)
@@ -1991,3 +1968,28 @@ pushHL e t h = pushHL_ (Z E e E) t h
 
 pushHR :: AVL e -> Int -> e -> (AVL e,Int)
 pushHR t h e = pushHR_ t h (Z E e E)
+
+
+
+ioEitherFilterT ::Show e => (e -> IO(Either a Bool)) -> AVL e -> IO(Either a (AVL e))
+ioEitherFilterT _ E = return $ Right E
+ioEitherFilterT f t = pattern  ((ioEitherFilterT f (left t) |||| ioEitherFilterT f (right t)) |||| f (value t))
+                               (\((l,r),b) -> let t' = join l r
+                                              in if b then pushL (value t) t'
+                                                 else t')
+
+
+
+-- Filtra un árbol  permitiendo devolver un error
+ioEitherMapT :: (e -> IO(Either a b)) -> AVL e -> IO(Either a (AVL b))
+ioEitherMapT f E = return $ Right E
+ioEitherMapT f t = do l' <- ioEitherMapT f (left t)
+                      r' <- ioEitherMapT f (right t)
+                      v'   <- f $ value t
+                      return $ do l'' <- l'
+                                  r'' <- r'
+                                  v <- v'
+                                  case t of
+                                   (N _ _ _) -> Right $ N l'' v r''
+                                   (Z _ _ _) -> Right $ Z l'' v r''
+                                   (P _ _ _) -> Right $ P l'' v r''

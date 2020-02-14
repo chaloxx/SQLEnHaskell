@@ -1,50 +1,11 @@
 module AST where
-import Avl (AVL(..),mapT,pushL,join,value,left,right,emptyT)
-import qualified Data.HashMap.Strict as HM  (HashMap (..),insert,delete,empty,update,fromList,(!),mapWithKey,keys,map)
-import qualified Data.Set as S
-import Data.Hashable
-import Data.Typeable (TypeRep)
-import System.Console.Terminal.Size  (size,width)
-import Data.List.Split
+
+import qualified Data.HashMap.Strict as HM
+import Avl (AVL(..))
 
 data Date = Date {dayD::Int,monthD::Int,yearD::Int} deriving (Ord,Eq,Show)
 data Time = Time {tHour::Int,tMinute::Int,tSecond::Int} deriving (Ord,Eq,Show)
 data DateTime = DateTime {year::Int,month::Int,day::Int,hour::Int,minute::Int,second::Int} deriving (Ord,Eq,Show)
-
-
-
--- Patrones de cómputo (ahorran código)
-(||||):: (Monad m, Monad n) => m (n a) -> m (n b) -> m (n (a,b))
-a |||| b = do (a', b') <- a //// b
-              return $ do (a'',b'') <- a' //// b'
-                          return (a'',b'')
-
-(////) :: Monad m => m a -> m b -> m (a,b)
-a //// b = do a' <- a
-              b' <- b
-              return (a',b')
-
-
-pattern :: (Monad m, Functor n) => m (n a) -> (a -> b) -> m (n b)
-pattern r f = do r' <- r
-                 return $ fmap f r'
-
-pattern2 :: IO (Either String a) -> (a -> IO (Either String b)) -> IO (Either String b)
-pattern2 res f = do res' <- res
-                    case res' of
-                      Right v -> f v
-                      Left msg -> return (Left msg)
-
-
-
-ioEitherFilterT ::Show e => (e -> IO(Either a Bool)) -> AVL e -> IO(Either a (AVL e))
-ioEitherFilterT _ E = return $ Right E
-ioEitherFilterT f t = pattern  ((ioEitherFilterT f (left t) |||| ioEitherFilterT f (right t)) |||| f (value t))
-                               (\((l,r),b) -> let t' = join l r
-                                              in if b then pushL (value t) t'
-                                                 else error "Aca entra")
-
-
 
 
 -- Definimos el entorno como el usuario actual, la BD que se está usando y la fuente usada
@@ -72,6 +33,8 @@ type Symbol = String
 type Cola a = [(Int,a)]
 type Distinct = Bool
 type UserName = String
+type BaseName = String
+type HaveNull = Bool
 
 -- Definimos una answer como una respuesta a una consulta
 -- Consta de 5 componentes:
@@ -121,13 +84,12 @@ data SQL = Seq SQL SQL
 
 
 --Aministración de usuarios
-data ManUsers = CUser String String
-              | SUser String String
-              | DUser String String
+data ManUsers = CUser UserName
+              | SUser UserName
+              | DUser UserName
               deriving Show
 
-data UserInfo = UN String -- Nombre de usuario
-              | UP String -- Pass
+data UserInfo = UN UserName -- Nombre de usuario
               | UB [String] -- Bases de datos que pertenecen al usuario
               deriving (Show,Ord,Eq)
 
@@ -153,16 +115,63 @@ data AR =     Pi Distinct [Args]
             | Order [Args] O
             | Group [Args]
             | Top Int
-            | Joinner JOINS [Args] BoolExp
             deriving Show
 
 
+instance Show BoolExp where
+  show (Not e) = "NOT " ++ (show e)
+  show (And e1 e2) = (show e1) ++ " AND " ++ (show e2)
+  show (Or e1 e2) = (show e1) ++ " OR " ++ (show e2)
+  show (Equal e1 e2) = (show e1) ++ " = " ++ (show e2)
+  show (Less e1 e2) = (show e1) ++ " < " ++ (show e2)
+  show (Great e1 e2) = (show e1) ++ " > " ++ (show e2)
+  show (InVals f dml) = (show f) ++ " IN " ++ (show dml)
+  show (InQuery f ls) = (show f) ++ " IN " ++ (show ls)
+  show (GrOrEq e1 e2) = (show e1) ++ " >= " ++ (show e2)
+  show (LsOrEq e1 e2) = (show e1) ++ " <= " ++ (show e2)
+  show (NotEq e1 e2) = (show e1) ++ " <> " ++ (show e2)
+
+
+instance Show Aggregate where
+  show (Min _ s) = "Min " ++ (show2 s)
+  show (Max _ s) = "Max " ++ (show2 s)
+  show (Sum _ s) = "Sum " ++ (show2 s)
+  show (Count _ s) = "Count " ++ (show2 s)
+  show (Avg _ s) = "Avg " ++ (show2 s)
+
+
+
+show2 (A1 s) = s
+show2 (A2 f) = show f
+show2 (A3 n) = show n
+show2 (A4 f) = show f
+show2 (A5 dt) = (show2 $ A6 $ Date (day dt) (month dt) (year dt)) ++ " " ++ (show2 $ A7 $ Time (hour dt) (minute dt) (second dt))
+show2 (A6 d) = (sh $ yearD d) ++ "-" ++ (sh $ monthD d) ++ "-" ++ (sh $ dayD d)
+    where sh = show
+show2 (A7 t) = (sh $ tHour t) ++ ":" ++ (sh $ tMinute t) ++ ":" ++ (sh $ tSecond t)
+   where sh 0 = "00"
+         sh t = show t
+show2 (Field e) = e
+show2 (As _ s) = s
+show2 (Dot s1 s2) = s1 ++ "." ++ s2
+show2 (Plus exp1 exp2) = (show2 exp1) ++ "+" ++ (show2 exp2)
+show2 (Minus exp1 exp2) = (show2 exp1) ++ "-" ++ (show2 exp2)
+show2 (Times exp1 exp2) = (show2 exp1) ++ "*" ++ (show2 exp2)
+show2 (Div exp1 exp2) = (show2 exp1) ++ "/" ++ (show2 exp2)
+show2 (Negate exp1) = "-" ++ (show2 exp1)
+show2 (Brack exp1) = "(" ++ (show2 exp1) ++ ")"
+show2 (All) = "All"
+show2 (Nulo) = "Null"
+
+
+
+show3 :: TableInfo -> String
+show3 (TN n) = n
 
 
 -- Lenguaje DML (Describen la información solicitada sobre la BD)
 data DML =     Select Distinct [Args] DML
               | From [Args] DML
-              | Join JOINS [Args] BoolExp DML
               | Where BoolExp  DML
               | GroupBy [Args] DML
               | Having BoolExp  DML
@@ -178,7 +187,6 @@ data DML =     Select Distinct [Args] DML
               deriving (Show, Eq, Ord)
 
 
-
 data JOINS = Inner | JLeft | JRight deriving (Show,Eq,Ord)
 
 
@@ -191,19 +199,20 @@ data Args = A1 String
           | A6 Date  --(solo fecha)
           | A7 Time -- (solo hora)
           | All
-          | Subquery DML
-          | As Args Args
+          | Subquery DML -- Tiene que devolver
+          | As Args TableName -- Renombrar tabla
           | Nulo
-          | Field String
-          | Dot String String
+          | Field FieldName
+          | Dot TableName FieldName
           | Plus Args Args
           | Minus Args Args
           | Times Args Args
           | Div Args Args
           | Negate Args
           | Brack Args
+          | Join JOINS Args Args BoolExp  --Relaciona 2 tablas
+          | ColAs Args FieldNames FieldNames -- Renombrar columnas
           deriving (Eq,Ord,Show)
-
 
 
 
@@ -227,6 +236,9 @@ data BoolExp =  And BoolExp BoolExp
               | InVals Args [Args]
               | InQuery Args DML
               | Like Args String
+              | GrOrEq Args Args
+              | LsOrEq Args Args
+              | NotEq Args Args
               deriving (Eq,Ord)
 
 
@@ -245,11 +257,7 @@ data O = A | D deriving (Show,Eq,Ord)
 
 -- DDL Language (Diseñan la BD)
 
-type BaseName = String
-type HaveNull = Bool
-
-data DDL =
-             CBase BaseName
+data DDL =   CBase BaseName
            | DBase BaseName
            | CTable Table [CArgs]
            | DTable FieldName
@@ -260,9 +268,9 @@ data DDL =
 
 
 -- Argumentos para crear una tabla
-data CArgs =  Col String Type HaveNull
-            | PKey [FieldName]
-            | FKey [FieldName] Table [FieldName] RefOption RefOption
+data CArgs =  Col String Type HaveNull -- Descripción de columna
+            | PKey [FieldName] -- Descripción de clave primaria
+            | FKey [FieldName] Table [FieldName] RefOption RefOption -- Descripción de clave foránea
             deriving (Show,Eq,Ord)
 
 -- Opciones de referencia
@@ -282,146 +290,3 @@ data RefOption = Restricted | Cascades | Nullifies  deriving (Show,Eq,Ord)
 data TableInfo = TO String | TN String | TS [String] | TT [Type]|  TK [String]
                    | TFK [(String,[(String,String)])] | TR [Reference] | HN [String]
                    | TB String deriving (Show,Eq,Ord)
-
-
-
-show3 :: TableDescript -> String
-show3 (TN n) = n
-
-
--- Algunas definiciones útiles
-
-
-instance (Ord a, Ord v) => Ord (HM.HashMap a v) where
-     t1 <= t2 = t1 == t2 || t1 < t2
-
-
-
-filterL = filter
-insertHM :: (Eq k, Hashable k) => k -> v -> HM.HashMap k v -> HM.HashMap k v
-insertHM = HM.insert
-deleteHM :: (Eq k, Hashable k) => k -> HM.HashMap k v -> HM.HashMap k v
-deleteHM = HM.delete
-emptyHM :: HM.HashMap k v
-emptyHM = HM.empty
-updateHM:: (Eq k, Hashable k) => (a -> Maybe a) -> k -> HM.HashMap k a -> HM.HashMap k a
-updateHM = HM.update
-mapHM :: (v1 -> v2) -> HM.HashMap k v1 -> HM.HashMap k v2
-mapHM = HM.map
-
-
-
-show2 (A1 s) = s
-show2 (A2 f) = show f
-show2 (A3 n) = show n
-show2 (A4 f) = show f
-show2 (A5 dt) = (show2 $ A6 $ Date (day dt) (month dt) (year dt)) ++ " " ++ (show2 $ A7 $ Time (hour dt) (minute dt) (second dt))
-show2 (A6 d) = (sh $ yearD d) ++ "-" ++ (sh $ monthD d) ++ "-" ++ (sh $ dayD d)
-    where sh = show
-show2 (A7 t) = (sh $ tHour t) ++ ":" ++ (sh $ tMinute t) ++ ":" ++ (sh $ tSecond t)
-   where sh 0 = "00"
-         sh t = show t
-show2 (Field e) = e
-show2 (As _ s) = show2 s
-show2 (Dot s1 s2) = s1 ++ "." ++ s2
-show2 (Plus exp1 exp2) = (show2 exp1) ++ "+" ++ (show2 exp2)
-show2 (Minus exp1 exp2) = (show2 exp1) ++ "-" ++ (show2 exp2)
-show2 (Times exp1 exp2) = (show2 exp1) ++ "*" ++ (show2 exp2)
-show2 (Div exp1 exp2) = (show2 exp1) ++ "/" ++ (show2 exp2)
-show2 (Negate exp1) = "-" ++ (show2 exp1)
-show2 (Brack exp1) = "(" ++ (show2 exp1) ++ ")"
-show2 (All) = "All"
-show2 (Nulo) = "Null"
-
-
-instance Show Aggregate where
-  show (Min _ s) = "Min " ++ (show2 s)
-  show (Max _ s) = "Max " ++ (show2 s)
-  show (Sum _ s) = "Sum " ++ (show2 s)
-  show (Count _ s) = "Count " ++ (show2 s)
-  show (Avg _ s) = "Avg " ++ (show2 s)
-
-
-instance Show BoolExp where
-  show (Not e) = "NOT " ++ (show e)
-  show (And e1 e2) = (show e1) ++ " AND " ++ (show e2)
-  show (Or e1 e2) = (show e1) ++ " OR " ++ (show e2)
-  show (Equal e1 e2) = (show e1) ++ " = " ++ (show e2)
-  show (Less e1 e2) = (show e1) ++ " < " ++ (show e2)
-  show (Great e1 e2) = (show e1) ++ " > " ++ (show e2)
-  show (InVals f dml) = (show f) ++ " IN " ++ (show dml)
-  show (InQuery f ls) = (show f) ++ " IN " ++ (show ls)
-
-
-
-fst' :: (a,b,c) -> a
-fst' (x,_,_) = x
-
-
-snd' :: (a,b,c) -> b
-snd' (_,y,_) = y
-
-trd' :: (a,b,c) -> c
-trd' (x,y,z) = z
-
-
-isInt :: RealFrac b => b -> Bool
-isInt x = x - fromInteger(round x) == 0
-
-
-fields = ["owner", "dataBase","tableName"]
-fields2 = fields ++ ["scheme","types","key","fkey","refBy","haveNull"]
-fields3 = fields ++ ["referencedBy"]
-
-belong :: Eq a => [a] -> a -> Bool
-belong [] _ = False
-belong (x:xs) y = if x == y then True
-                  else belong xs y
-
-createRegister :: Env -> String -> HM.HashMap String TableDescript
-createRegister e n =  HM.fromList $ zip fields [TO (name e), TB (dataBase e),TN n]
-
-
-
-printTable :: Show v => (v -> String) -> [String] -> AVL (HM.HashMap String v) -> IO ()
-printTable print s t =
-  do r <- size
-     case r of
-       Nothing -> error ""
-       Just w -> do putStrLn $ line $ width w
-                    putStrLn  $ fold s
-                    putStrLn $ line $ width w
-                    sequence_ $ mapT (\ x -> putStrLn $ fold $ map (f' x) s) t
- where fold s = txt 0 s 30
-       f x y = x ++ "|" ++ y
-       f' x v =  print $ x HM.! v
-       txt _ [] _ = ""
-       txt 0 (x:xs) n  = "|" ++ x ++  txt (n - length x) xs n
-       txt c v n = " " ++ txt (c-1) v n
-       line 0 = ""
-       line n = '-': (line (n-1))
-
-
-isAgg (A2 _) = True
-isAgg (As e1 _) = isAgg e1
-isAgg _ = False
-
-min3 :: Float -> Float -> Float -> Float
-min3 v1 v2 v3 =  min v3 (min v1 v2)
-
-max3 :: Float -> Float -> Float -> Float
-max3 v1 v2 v3 = max v3 (max v1 v2)
-
-toFloat :: Args -> Float
-toFloat (A3 n) = fromIntegral n
-toFloat (A4 n) = n
-
-
-retHeadOrNull :: [AVL a] -> AVL a
-retHeadOrNull [] = emptyT
-retHeadOrNull tables = head tables
-
-
--- Obtener un HM con los campos de cada tabla
-giveMeOnlyFields :: HM.HashMap a (HM.HashMap b c) -> HM.HashMap a [b]
-giveMeOnlyFields hm = HM.mapWithKey (\k -> \v -> HM.keys v) hm

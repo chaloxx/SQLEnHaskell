@@ -30,7 +30,7 @@ version = Version [0,1,0,0] []
 bindir, libdir, dynlibdir, datadir, libexecdir, sysconfdir :: FilePath
 
 bindir     = "/home/pablo/.cabal/bin"
-libdir     = "/home/pablo/.cabal/lib/x86_64-linux-ghc-8.0.2/Avl-Tree-0.1.0.0-BjG4pOi43DC8ejS8kGvgfa"
+libdir     = "/home/pablo/.cabal/lib/x86_64-linux-ghc-8.0.2/Avl-Tree-0.1.0.0-6D7ddk4duq65ObYyQ6tdUC"
 dynlibdir  = "/home/pablo/.cabal/lib/x86_64-linux-ghc-8.0.2"
 datadir    = "/home/pablo/.cabal/share/x86_64-linux-ghc-8.0.2/Avl-Tree-0.1.0.0"
 libexecdir = "/home/pablo/.cabal/libexec"

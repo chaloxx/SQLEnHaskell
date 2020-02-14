@@ -42,3 +42,5 @@ WHERE  Persona.codigo = PrefiereZona.codigo_cliente and /*Zonas preferidas*/
                                                           NOT EXISTS (SELECT * FROM Visitas WHERE
                                                                       Visitas.codigo_cliente = Cliente.codigo and
                                                                       Visitas.codigo_inmueble = Inmueble.codigo)));
+
+SELECT Inmueble.codigo FROM Visitas,Inmueble WHERE  Visitas.codigo_inmueble = Inmueble.codigo

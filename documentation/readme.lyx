@@ -1,0 +1,348 @@
+#LyX 2.2 created this file. For more info see http://www.lyx.org/
+\lyxformat 508
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\maintain_unincluded_children false
+\language english
+\language_package default
+\inputencoding auto
+\fontencoding global
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\paperfontsize default
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\quotes_language english
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tracking_changes false
+\output_changes false
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\end_header
+
+\begin_body
+
+\begin_layout Title
+SQL en Haskell
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\align center
+
+\series bold
+INTRO 
+\end_layout
+
+\begin_layout Standard
+El proyeto llevado a cabo es una implementación del lenguaje SQL (Structured
+ Query Language), el cual permite crear, modificar y eliminar bases de datos
+ relacionales (conjuntos de datos persistentes pertenecientes a un mismo
+ contexto) y a la vez permite hacer consultas sobre las mismas.
+ Las BD SQL, como se las suele denominar, han jugado un rol fundamental
+ en el paso de los años en el desarrollo de empresas, ya que proveen mecanismos
+ automatizados para el almacen y la consulta de los datos pertinentes a
+ las empresas, además de asegurar la consistencia y seguridad de los mismos.
+ Hoy en día encontramos otro tipo de BD denominadas NoSQL (Not Only SQL)
+ usadas principalmente por las redes sociales y para el procesamiento de
+ grandes volúmenes de datos, para los cuales los estructuras tradicionales
+ de almacenamiento y consulta enfrentan problemas de escalabilidad y rendimiento.
+ Las BD NoSQL no usan el modelo relacional (o a lo sumo lo usan como apoyo)
+ sino que se sirven de otras estructuras como los que proveen las tablas
+ hash, los documentos, los grafos y la orientación a objetos.
+ Elegí implementar un SGBD (Sistema Gestor de Base de Datos) que utiliza
+ el modelo relacional para aprender sobre su funcionamiento interno y porque
+ ofrece una sintaxis sencilla (aunque muy flexible) que permite operar a
+ trávez del álgebra relacional y el cálculo de dominio de tuplas.
+ El SGBD permite que cada usuario cree y administre sus bases de datos.
+ 
+\end_layout
+
+\begin_layout Standard
+El alcance de este proyecto fue implementar las operaciones básicas que
+ proporciona el estándar de SQL en el lenguaje Haskell.
+ Con este fin, separé el lenguaje en 3 partes : DDL (lenguaje de diseño
+ de datos) y DML (lenguaje de manejo de datos) y MUL (Lenguaje de Manejo
+ de Usuario,operaciones básicas para crear un usuario , seleccionarlo o
+ eliminarlo).
+ Además una operación denominada SOURCE, nos permitirá leer archivos fuentes
+ escritos en sintaxis SQL y con la extensión .sql para escapar de las limitacione
+s que ofrece una terminal.
+\end_layout
+
+\begin_layout Standard
+\begin_inset VSpace defskip
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section
+
+\series bold
+DISEÑO
+\end_layout
+
+\begin_layout Subsection
+Representación
+\end_layout
+
+\begin_layout Itemize
+Tablas: Árboles AVL para representar a las tablas como una colección de
+ filas.
+\end_layout
+
+\begin_layout Itemize
+Filas: Hashmaps dónde la clave es el nombre de la columna y el valor es
+ el valor de la columna.
+\end_layout
+
+\begin_layout Itemize
+Para almacenar los datos de forma persistente utilizé módulos haskell que
+ se van recompilando ante cada actualizacióny se eliminan ante un borrado.
+ Los mismos se almacenan en el directorio DataBase (code/DataBase) y están
+ separados por usuario y base de datos.
+ De esta forma para acceder a una tabla, internamente se carga el código
+ objeto del módulo Haskell y se busca el símbolo que contenga la actualización
+ más reciente.
+\end_layout
+
+\begin_layout Itemize
+Datos: Los tipos de datos primitivos del sistema se representan con el tipo
+ Data.
+ SQL posee un conjunto de datos básicos y variantes de los mismos según
+ el valor máximo que estos pueden llegar a tomar (ejemplo: bigint, int,
+ smallint, tinyint).
+ Por simplificación, nuestro sistema admitirá solo los siguientes tipos
+ de datos: string, int,float,dateTime,date,time,bool.
+\end_layout
+
+\begin_layout Subsection
+Módulos 
+\end_layout
+
+\begin_layout Standard
+A continuación un breve resumen de cada módulo y su función:
+\end_layout
+
+\begin_layout Itemize
+Init : Implementa una interfaz para el usuario y corre el programa.
+\end_layout
+
+\begin_layout Itemize
+SqlParse : Parser del programa.
+ Procesa las cadenas de entrada y devuelve una secuencia de comandos a ejecutar.
+\end_layout
+
+\begin_layout Itemize
+Run : Llama al parser y ejecuta los comandos.
+\end_layout
+
+\begin_layout Itemize
+DynGhc : Operaciones de carga de código objeto, modificación de código fuente,
+ búsqueda de símbolos dentro del código objeto y compilación de código fuente.
+\end_layout
+
+\begin_layout Itemize
+Error : Implementación de errores.
+\end_layout
+
+\begin_layout Itemize
+UserFunctions : Creación, borrado y selección de usuario.
+\end_layout
+
+\begin_layout Itemize
+DmlFunctions : Procesamiento de consultas.
+\end_layout
+
+\begin_layout Itemize
+DdlFunctions : Diseño y borrado de tablas, bases de datos.
+\end_layout
+
+\begin_layout Itemize
+Check : Chequeo de tipos, chequeos de restricciones de clave foránea.
+\end_layout
+
+\begin_layout Itemize
+Url : Crea rutas de archivos usando el entorno.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Separator plain
+\end_inset
+
+
+\end_layout
+
+\begin_layout Subsection
+Módulos de datos
+\end_layout
+
+\begin_layout Standard
+Los módulos de datos se encuentran en code/Data.
+ Al no poder instalarlos directamente con Cabal, los descargue, los modifique
+ y los instale de forma manual.
+\end_layout
+
+\begin_layout Itemize
+Avl : Definicón de árboles AVL y sus métodos.
+\end_layout
+
+\begin_layout Itemize
+COrdering : Ampliamente utilizado por Avl.
+ Similar a Ordering, pero combina valores si se consideran iguales en algún
+ sentido.
+\end_layout
+
+\begin_layout Itemize
+AST : Árbol de sintaxis abstracta y estructuras de datos definidas.
+\end_layout
+
+\begin_layout Itemize
+Utilities: Funciones adicionales.
+ Se usan como funciones auxiliares dentro del código del sistema.
+\end_layout
+
+\begin_layout Itemize
+Patterns: Dado que las sentencias 
+\series bold
+do 
+\series default
+y el operador 
+\series bold
+return 
+\series default
+se repiten muy a menudo cuando se trabaja con mónadas compuestas, decidí
+ abstraer ciertos comportamientos en los cómputos para reducir la cantidad
+ de código a escribir y simplificar el entendimiento del mismo.
+\end_layout
+
+\begin_layout Subsection
+Decisiones de diseño
+\end_layout
+
+\begin_layout Itemize
+Las subconsultas se pueden realizar en tres casos: dentro de una claúsula
+ SELECT, una claúsula FROM o una claúsula WHERE.
+\end_layout
+
+\begin_layout Itemize
+Decidí dar un alias temporal a las columnas y no permitir relacionar 2 tablas
+ con la claúsula JOIN que compartan atributos.
+\end_layout
+
+\begin_layout Itemize
+Para seleccionar todos los campos de una tabla se usa ALL en vez de *, para
+ que no haya ambigüedad con el producto.
+\end_layout
+
+\begin_layout Section
+Desarrollo
+\end_layout
+
+\begin_layout Subsection
+Obstáculos
+\end_layout
+
+\begin_layout Itemize
+Construir un AST que fuera flexible.
+\end_layout
+
+\begin_layout Itemize
+Encontrar una forma de compilar módulos de forma dinámica (https://purelyfunctio
+nal.org/posts/2016-05-20-dynamic-loading-haskell-module.html).
+\end_layout
+
+\begin_layout Itemize
+Como dije en la sección 1.3, no pude instalar comodamente algunas librerías
+ de Haskell con Cabal.
+ Las descargue y les hice algunas modificaciones (AvlTree-4.2, COrdering-2.3)
+ para poder instalarlas manualmente.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Separator plain
+\end_inset
+
+
+\end_layout
+
+\begin_layout Section*
+3 Observaciones finales
+\end_layout
+
+\begin_layout Itemize
+La falta de un optimizador hace que ciertas consultas , por ejemplo aquellas
+ que incluyen consultas anidadas, resulten imposibles de realizar ya que
+ la demora es inaceptable.
+ Se puede ver un ejemplo en el archivo de test.
+\end_layout
+
+\begin_layout Itemize
+Faltó una mayor flexibilidad en el uso del operador '.' (dot)
+\end_layout
+
+\begin_layout Section*
+4 Instalación
+\end_layout
+
+\begin_layout Section*
+5 Bibliografía
+\end_layout
+
+\end_body
+\end_document
