@@ -1,8 +1,4 @@
--- Basado en:
--- Functional parsing library from chapter 8 of Programming in Haskell,
--- Graham Hutton, Cambridge University Press, 2007.
---
--- Modificado por Mauro Jaskelioff
+ {-# LANGUAGE NoMonadFailDesugaring #-} 
 
  module Parsing where
 
@@ -12,8 +8,7 @@
  import AST (DateTime(..),Date(..),Time(..),Args(..))
 
 
--- The monad of parsers
--- --------------------
+-- Modulo de subparsers útiles para datos específicos
 
  newtype Parser a              =  P (String -> [(a,String)])
 

@@ -7,6 +7,9 @@ import Data.Typeable (TypeRep)
 import System.Console.Terminal.Size  (size,width)
 import Data.List.Split
 
+
+-- Modulo con árboles de sintaxis abstractas y otras definiciones útiles
+
 data Date = Date {dayD::Int,monthD::Int,yearD::Int} deriving (Ord,Eq,Show)
 data Time = Time {tHour::Int,tMinute::Int,tSecond::Int} deriving (Ord,Eq,Show)
 data DateTime = DateTime {year::Int,month::Int,day::Int,hour::Int,minute::Int,second::Int} deriving (Ord,Eq,Show)
@@ -42,7 +45,7 @@ ioEitherFilterT _ E = return $ Right E
 ioEitherFilterT f t = pattern  ((ioEitherFilterT f (left t) |||| ioEitherFilterT f (right t)) |||| f (value t))
                                (\((l,r),b) -> let t' = join l r
                                               in if b then pushL (value t) t'
-                                                 else error "Aca entra")
+                                                 else t')
 
 
 
@@ -53,11 +56,11 @@ type Types = HM.HashMap String Type
 type TabTypes = HM.HashMap String Types
 type Vals = HM.HashMap String Args
 -- Definimos el contexto de una consulta
--- Esto nos permite hacer consultas recursivas o subconsultas
+-- Esto nos permite llevar el estado de una consulta
 -- pues en cualquier momento podemos chequear el tipo de una expresión
 -- o el valor de una variable de tupla
 -- El contexto contiene 3 componentes :
---  Env (Entorno) : Usuario, base de datos, fuente de entrada
+--  Env (Entorno) : Usuario, base de datos, fuente de datos
 -- Types : Campos de cada tabla y los tipos de cada campo
 -- Vals : Campos de cada tabla y los valores de cada campo
 type Context = (Env,HM.HashMap String Vals,HM.HashMap String Types )
@@ -91,8 +94,25 @@ type Reg = HM.HashMap String Args
 -- Representamos una Tala
 type Tab = AVL (Reg)
 
--- Representamos información sobre una tabla
+-- Descripción de la tabla (columnas,tipos,keys,foreing keys)
 type TableDescript = ([String],[Type],[String],[String],ForeignKey)
+
+
+
+-- Tipo de dato para representar la información de la tabla
+-- TB : base
+-- TO : propietario
+-- TN : nombre
+-- TS : esquema
+-- TT : Tipo de cada columna
+-- TK : clave primaria
+-- Env : Tabla referenciada, clave foránea
+-- TR : Tabla por la que es referenciada, opción de delete, opción de update
+-- HN : Lista de campos que admiten valores nulos
+data TableInfo = TO String | TN String | TS [String] | TT [Type]|  TK [String]
+                   | TFK [(String,[(String,String)])] | TR [Reference] | HN [String]
+                   | TB String deriving (Show,Eq,Ord)
+
 
 --
 type ForeignKey = [(String,[(String,String)],RefOption,RefOption)]
@@ -131,7 +151,7 @@ data UserInfo = UN String -- Nombre de usuario
               | UB [String] -- Bases de datos que pertenecen al usuario
               deriving (Show,Ord,Eq)
 
--- Operadores de álgebra relacional (Operan sobre las BD)
+-- Operadores de álgebra relacional (Operan sobre las tablas)
 -- Operadores (argumentos) :
 -- Pi proyeccion (booleano para eliminar registros duplicados y lista de cosas a proyectar)
 -- Prod producto cartesiano (lista de tablas)
@@ -269,31 +289,18 @@ data CArgs =  Col String Type HaveNull
 data RefOption = Restricted | Cascades | Nullifies  deriving (Show,Eq,Ord)
 
 
--- Tipo de dato para representar la información de la tabla
--- TB : base
--- TO : propietario
--- TN : nombre
--- TS : esquema
--- TT : Tipo de cada columna
--- TK : clave primaria
--- Env : Tabla referenciada, clave foránea
--- TR : Tabla por la que es referenciada, opción de delete, opción de update
--- HN : Lista de campos que admiten valores nulos
-data TableInfo = TO String | TN String | TS [String] | TT [Type]|  TK [String]
-                   | TFK [(String,[(String,String)])] | TR [Reference] | HN [String]
-                   | TB String deriving (Show,Eq,Ord)
 
 
 
-show3 :: TableDescript -> String
+show3 :: TableInfo -> String
 show3 (TN n) = n
 
 
 -- Algunas definiciones útiles
 
 
-instance (Ord a, Ord v) => Ord (HM.HashMap a v) where
-     t1 <= t2 = t1 == t2 || t1 < t2
+-- instance (Ord a, Ord v) => Ord (HM.HashMap a v) where
+--   t1 <= t2 = t1 == t2 || t1 < t2
 
 
 
@@ -378,8 +385,10 @@ belong [] _ = False
 belong (x:xs) y = if x == y then True
                   else belong xs y
 
-createRegister :: Env -> String -> HM.HashMap String TableDescript
-createRegister e n =  HM.fromList $ zip fields [TO (name e), TB (dataBase e),TN n]
+createInfoRegister :: Env -> String -> HM.HashMap String TableInfo
+createInfoRegister e n =  HM.fromList $ zip fields [TO (name e), TB (dataBase e),TN n]
+
+
 
 
 

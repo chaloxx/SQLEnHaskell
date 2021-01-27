@@ -1,3 +1,7 @@
+-- Modulo inicial
+
+
+
 import AST (Env(..))
 import System.Console.Readline
 import Run (parseCmd,checkSelectUser)
@@ -8,6 +12,7 @@ main = main' (Env "" "" "Estándar Input")
 
 main' :: Env -> IO ()
 main' e = do maybeLine <- readline (txt e)
+             -- Leer comando -> parsearlo -> ejecutarlo -> volver a leer
              case maybeLine of
               Nothing  -> main' e
               Just "q" -> return ()

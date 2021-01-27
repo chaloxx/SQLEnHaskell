@@ -2,9 +2,12 @@ module Url  where
 import AST (Env (..))
 
 
+
+-- Modulo para la formación de rutas de acceso
+
 --Obtiene la ruta hacia una BD
 url :: String -> String -> FilePath
-url n b = "DataBase/" ++ n ++ "/" ++ b
+url u n = "DataBase/" ++ u ++ "/" ++ n
 
 --Obtiene la ruta hacia una tabla
 url' :: Env -> String -> FilePath

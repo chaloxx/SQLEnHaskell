@@ -12,7 +12,7 @@ import qualified Data.Bits as Bits
 import Control.Applicative(Applicative(..))
 import Control.Monad (ap)
 
--- parser produced by Happy Version 1.19.8
+-- parser produced by Happy Version 1.19.11
 
 data HappyAbsSyn t9 t10 t11 t12 t13 t14 t15 t16
 	= HappyTerminal (Token)
@@ -3225,7 +3225,13 @@ sqlParse s = sql s (1,1)
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "<built-in>" #-}
 {-# LINE 1 "<command-line>" #-}
-{-# LINE 8 "<command-line>" #-}
+
+
+
+
+
+
+
 # 1 "/usr/include/stdc-predef.h" 1 3 4
 
 # 17 "/usr/include/stdc-predef.h" 3 4
@@ -3272,10 +3278,7 @@ sqlParse s = sql s (1,1)
 
 
 
-
-
-
-{-# LINE 8 "<command-line>" #-}
+{-# LINE 7 "<command-line>" #-}
 {-# LINE 1 "/usr/lib/ghc/include/ghcversion.h" #-}
 
 
@@ -3292,10 +3295,10 @@ sqlParse s = sql s (1,1)
 
 
 
+{-# LINE 7 "<command-line>" #-}
+{-# LINE 1 "/tmp/ghc8336_0/ghc_2.h" #-}
 
 
-{-# LINE 8 "<command-line>" #-}
-{-# LINE 1 "/tmp/ghc8814_0/ghc_2.h" #-}
 
 
 
@@ -3452,7 +3455,41 @@ sqlParse s = sql s (1,1)
 
 
 
-{-# LINE 8 "<command-line>" #-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{-# LINE 7 "<command-line>" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 -- Id: GenericTemplate.hs,v 1.26 2005/01/14 14:47:22 simonmar Exp 
 

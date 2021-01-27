@@ -1,3 +1,7 @@
+{-# LANGUAGE NoMonadFailDesugaring #-}
+
+
+
 module DmlFunctions where
 import Data.Typeable
 import AST
@@ -21,17 +25,25 @@ import Parsing (parse,sepBy,char,identifier)
 import Check
 import Control.Monad (when)
 import Prelude hiding (fail,lookup)
+
+-- Modulo de funciones dml
+
+
+
+
+
+
 ---- Insertar en una tabla
 insert :: Env -> TableName -> AVL ([Args]) ->  IO ()
-insert e n entry = do let (r,u) = url' e n ||| name e
+insert e n entry = do let (r,u) = (url (name e) (dataBase e) ++ "/") ||| name e
                       -- Calcular metadata
-                      inf <- loadInfoTable ["scheme","types","key","fkey","haveNull"] e n :: IO [TableDescript]
+                      inf <- loadInfoTable ["scheme","types","key","fkey","haveNull"] e n :: IO [TableInfo]
                       case inf of
                          [] -> tableDoesntExist
                          [TS scheme,TT types,TK k, TFK fk, HN nulls] -> do  res <- obtainTable r n :: IO (Maybe (Tab))
                                                                             case res of
                                                                              Nothing -> error r
-                                                                             Just t  -> insert' e r types scheme nulls k t entry fk
+                                                                             Just t  -> insert' e (r++"/"++n) types scheme nulls k t entry fk
 
 -- Segundo nivel de insertar
 insert' _ _ _ _ _ _ _ E _= return ()
@@ -84,7 +96,7 @@ delete g n exp = do let e = fst' g
                     res <- obtainTable r n
                     case res of
                         Nothing ->  putStrLn "La tabla no existe"
-                        Just t -> do [TK k,TR ref] <- loadInfoTable ["key","refBy"] e n :: IO([TableDescript])
+                        Just t -> do [TK k,TR ref] <- loadInfoTable ["key","refBy"] e n :: IO([TableInfo])
                                      let (xs,ys,zs) =  partRefDel  ref
                                      xs' <- obtainTableList e xs -- tablas que tienen una referencia de tipo restricted sobre t'
                                      ys' <- obtainTableList e ys -- tablas que tienen una referencia de tipo cascades sobre t'
@@ -257,9 +269,6 @@ obtainValue _ (Dot s2 v) r = case lookupList r [s2] v of
 
 
 --- Ejecutar consultas
-
-
-
 insertCola (n,x) [] = [(n,x)]
 insertCola (n,x) c@((n',x'):xs) = if n < n' then (n',x'): (insertCola (n,x) xs)
                                   else (n,x):c
@@ -645,8 +654,8 @@ prod' e (As (Field n1) (Field n2)) = pattern (prod' e (Field n1))
                                              (\(g,_,fields,t) -> let g' = (fst' g, snd' g, updateKey n1 n2 (trd' g))
                                                                  in (g',n2,fields,t))
 
-
-prod' e (Field n) = let (path,user) = (url' e n) ||| name e
+-- Tercer caso : Tabla comun
+prod' e (Field n) = let (path,user) = (url  (name e) (dataBase e)++"/") ||| name e
                     in do res <- obtainTable path n
                           case res of
                            Nothing -> errorProd n
@@ -897,7 +906,7 @@ evalBoolExp s g (InVals (Field v) l) = pattern (return $ lookupList (snd' g) s v
 -- Evalua si field está en la columna que es resultado de dml
 evalBoolExp s g (InQuery (Field f1) dml) = pattern2  (runQuery' g (conversion dml))
                                                      (\(g1,b,_,fields,[t]) -> return $
-                                                                              if length fields /= 1 || b then error "Error" -- La busqueda debe ser sobrre una columna
+                                                                              if length fields /= 1 || b then error "Error" -- La busqueda debe ser sobre una columna
                                                                               else let [f2] = fields
                                                                                    in do t1 <- lookupList (trd' g1) s f1 -- Buscamos los tipos
                                                                                          t2 <- lookupList (trd' g1) s f2

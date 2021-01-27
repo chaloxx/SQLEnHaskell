@@ -4,8 +4,8 @@ import Prelude hiding (catch,lookup)
 import System.Directory
 import Control.Exception
 import System.IO.Error hiding (catch)
-import AST (BaseName,CArgs (..),TableInf,Type,Env(..),TableDescript(..),Args,UserInfo(..),
-            Reference,ForeignKey,Tab,fields,fields2,fields3,createRegister,RefOption(..),printTable,show3)
+import AST (BaseName,CArgs (..),TableInfo(..),Type,Env(..),TableDescript(..),Args,UserInfo(..),
+            Reference,ForeignKey,Tab,fields,fields2,fields3,createInfoRegister,RefOption(..),printTable,show3)
 import DynGhc (compile)
 import Data.HashMap.Strict (fromList,HashMap,(!),update,lookup,alter,union,adjust)
 import Error (errorCreateTableKeyOrFK,tableExists,errorDropTable,succesDropTable,
@@ -23,9 +23,11 @@ import Check (checkReference, checkNullifies)
 import qualified Data.Set as Set (fromList,isSubsetOf)
 import Control.DeepSeq
 
-code :: String -> TableInf -> String
-code f (n,t,h,k,_) =   "module " ++ f ++ " where \n" ++
-                       "import AST (Args (..),Type(..),TableDescript(..),Date(..),Time(..),DateTime(..))\n" ++
+-- Modulo de funciones ddl
+
+code :: String -> TableDescript -> String
+code f (_,_,_,k,_) =   "module " ++ f ++ " where \n" ++
+                       "import AST (Args (..),Type(..),TableInfo(..),Date(..),Time(..),DateTime(..))\n" ++
                        "import Data.Typeable\n" ++
                        "import Data.HashMap.Strict hiding (keys) \n" ++
                        "import Avl (AVL(..),m)\n" ++
@@ -100,10 +102,10 @@ fun reg x = fstByCC (\z1 z2 -> c2 ["userName"] z1 z2 ) reg x
 
 createTable :: Env -> String -> [CArgs]  -> IO ()
 createTable e n c =
- do res <- obtainTable syspath "Tables" :: IO (Maybe (AVL (HashMap String TableDescript)))
+ do res <- obtainTable syspath "Tables" :: IO (Maybe (AVL (HashMap String TableInfo)))
     case res of
       Nothing -> putStrLn "Error Fatal al crear tabla"
-      Just t -> do let reg = createRegister e n
+      Just t -> do let reg = createInfoRegister e n
                     -- Existe alguna tabla?
                    if isMember fields reg t then tableExists n
                    else do let (q@(scheme,types,nulls,k,fk),r) = collect c ||| url' e n
@@ -147,7 +149,7 @@ createReference n e ((x,xs,o1,o2):ys) =
   do res <- obtainTable syspath "Tables"
      case res of
       Nothing -> error "Error Fatal"
-      Just t ->  do let reg = createRegister e  x
+      Just t ->  do let reg = createInfoRegister e  x
                     -- Reemplaza en el árbol t el registro correspondiente
                     let t' = write  (fun (n,o1,o2) fields reg) t
                     reWrite t' tablepath
@@ -182,7 +184,7 @@ dropTable e n = do res <- obtainTable tablepath "Tables"
   -- segundo nivel de dropTable
   dropTable' l e n t  =
               do t' <- removeReferences e t n l
-                 let reg = createRegister e n
+                 let reg = createInfoRegister e n
                  case deleteT  (c2 fields reg) t' of
                    Nothing -> putStrLn $ errorDropTable n
                    Just t'' -> do reWrite t'' tablepath
@@ -193,7 +195,7 @@ dropTable e n = do res <- obtainTable tablepath "Tables"
 
 
 -- Elimina todas las referencias hechas por la tabla n
-removeReferences :: Env -> AVL (HashMap String TableDescript) -> String -> [String] -> IO(AVL (HashMap String TableDescript))
+removeReferences :: Env -> AVL (HashMap String TableInfo) -> String -> [String] -> IO(AVL (HashMap String TableInfo))
 removeReferences _ t _ [] = return t
 removeReferences e t n (x:xs) = let reg = fromList $ zip fields [TO (name e), TB (dataBase e), TN x]
                                     t' = write (find n reg) t
@@ -209,7 +211,7 @@ removeReferences e t n (x:xs) = let reg = fromList $ zip fields [TO (name e), TB
 
 
 -- Procesa las columnas para separar la información pertinente
-collect :: [CArgs] -> TableInf
+collect :: [CArgs] -> TableDescript
 collect [] = ([],[],[],[],[])
 collect((Col n t hn):xs) = let (l1,l2,l3,k,fk) = collect xs
                           in -- Chequear si la columna admite nulos
@@ -223,15 +225,15 @@ collect ((FKey xs s ys o1 o2):rs) = let (l1,l2,l3,k,fk) = collect rs
 
 -- Mostrar todas las tablas correspondientes a la actual base de datos
 showTable :: Env -> IO()
-showTable e = do res <- obtainTable syspath "Tables"  :: IO (Maybe (AVL (HashMap String TableDescript)))
+showTable e = do res <- obtainTable syspath "Tables"  :: IO (Maybe (AVL (HashMap String TableInfo)))
                  case res of
                   Nothing -> putStrLn "Error fatal"
-                  Just t -> do let fields = ["owner","dataBase"]
-                               let reg = fromList $ zip fields  [TO (name e), TB (dataBase e)]
-                               let t' = filterT (aux fields reg) t
+                  Just t -> do let fields4 = ["owner","dataBase"]
+                               let reg = fromList $ zip  fields4 [TO (name e), TB (dataBase e)]
+                               let t' = filterT (predic fields4  reg) t
                                printTable show3 ["tableName"] t'
 
 
-   where aux fields r1 r2   = case c fields r1 r2 of
+   where predic fields r1 r2   = case c fields r1 r2 of
                                 Eq _ -> True
                                 _ -> False

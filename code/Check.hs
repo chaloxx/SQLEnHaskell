@@ -1,7 +1,11 @@
+-- Modulo para chequeo de tipos, claves, campos nulos, claves foráneasa
+
+
+
 module Check where
 
-import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,TabTypes,ForeignKey,Env,TableDescript(..),RefOption(..),(////),Types
-            ,show2)
+import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,TabTypes,ForeignKey,Env,RefOption(..),(////),Types
+            ,show2,TableInfo(..))
 import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,lookupList,errorForeignKey,ok)
 import Data.HashMap.Strict hiding (map)
 import Avl (isMember)

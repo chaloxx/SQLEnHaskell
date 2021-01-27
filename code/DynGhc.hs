@@ -7,7 +7,7 @@ import Encoding
 import GHCi.ObjLink
 import Data.Typeable (TypeRep)
 import GHC.Paths
-import AST (Symbol,Args(..),TableDescript(..),Env(..),createRegister,fields)
+import AST (Symbol,Args(..),Env(..),createInfoRegister,fields,TableInfo(..))
 import qualified GHC
 import Data.Maybe
 import Avl
@@ -23,14 +23,17 @@ import System.Directory
 
 
 
-loadInfoTable :: [String] -> Env -> String -> IO([TableDescript])
+loadInfoTable :: [String] -> Env -> String -> IO([TableInfo])
 loadInfoTable s e m = do res <- obtainTable syspath "Tables"
                          case res of
                           Nothing -> return []
-                          Just t -> do let reg = createRegister e m
+                          Just t -> do let reg = createInfoRegister e m
                                        case search fields reg t of
                                         Nothing -> return []
                                         Just reg' -> return $ map  (\x -> reg' ! x) s
+
+
+
 
 
 appendLine ::Show a => FilePath -> AVL (HashMap String a) -> IO ()
@@ -102,15 +105,15 @@ obtainN (x:xs) r | isDigit x = obtainN xs (r ++ [x])
 
 load :: FilePath -> String -> Symbol ->  IO (Maybe a)
 load r m f =  do let path = r ++ m ++ ".o"
-                 initObjLinker
+                 initObjLinker(DontRetainCAFs)
                  loadObj path
                  resolveObjs
                  ptr <- lookupSymbol (mangleSymbol Nothing m f)
                  unloadObj path
                  case ptr of
-                    Nothing -> error f--return (Nothing)
-                    Just (Ptr addr) -> case addrToAny# addr of
-                                         (# t #) -> return $ Just t
+                   Nothing -> error f--return (Nothing)
+                   Just (Ptr addr) -> case addrToAny# addr of
+                     (# t #) -> return $ Just t
 
 
 

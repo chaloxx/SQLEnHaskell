@@ -4,7 +4,6 @@ import AST
 import DdlFunctions (createTable,dropTable,showTable,createDataBase,dropDataBase)
 import DmlFunctions
 import Url
-import System.TimeIt
 import Control.Exception
 import Data.List (isSuffixOf,dropWhileEnd,nub,sort)
 import Error (errorSource,errorOpen,errorSelUser,errorSelBase)
@@ -50,7 +49,7 @@ runSql e (Source p) = if ".sql" `isSuffixOf` p then read (Env (name e) (dataBase
 
 
 
--- Ejecutar funciones de administración
+-- Ejecutar funciones de administración de usuarios
 runManUser :: Env -> ManUsers ->  IO (Env)
 runManUser e (CUser u p) = do createUser u p;return e
 runManUser e (SUser u p) = selectUser (source e) u p
@@ -129,12 +128,7 @@ checkTable r = do b <- doesFileExist (r ++ ".hs")
 
 
 
-
-
-
-
-
--- Imprime las tablas en un ruta data
+-- Lista las tablas en un ruta data
 printDirectory :: FilePath -> IO ()
 printDirectory p = do l <- listDirectory p
                       let l' = sort $ nub $ map quitExtension l

@@ -7,6 +7,9 @@ import AST
 import DmlFunctions (obtainUpd)
 import Url
 
+
+-- Modulo con operaciones de álgebra relacional
+
 -- Executa producto cartesiano entre todas las tablas
 exProd :: Env -> [String] -> Either String  (AVL (HashMap String Args))
 exProd _ [] = ok E

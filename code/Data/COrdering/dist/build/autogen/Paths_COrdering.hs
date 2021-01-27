@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE NoRebindableSyntax #-}
 {-# OPTIONS_GHC -fno-warn-missing-import-lists #-}
-{-# OPTIONS_GHC -fno-warn-implicit-prelude #-}
 module Paths_COrdering (
     version,
     getBinDir, getLibDir, getDynLibDir, getDataDir, getLibexecDir,
@@ -30,10 +30,10 @@ version = Version [0,1,0,0] []
 bindir, libdir, dynlibdir, datadir, libexecdir, sysconfdir :: FilePath
 
 bindir     = "/home/pablo/.cabal/bin"
-libdir     = "/home/pablo/.cabal/lib/x86_64-linux-ghc-8.0.2/COrdering-0.1.0.0-j8SkQXSNRfHeEiugKUtoF"
-dynlibdir  = "/home/pablo/.cabal/lib/x86_64-linux-ghc-8.0.2"
-datadir    = "/home/pablo/.cabal/share/x86_64-linux-ghc-8.0.2/COrdering-0.1.0.0"
-libexecdir = "/home/pablo/.cabal/libexec"
+libdir     = "/home/pablo/.cabal/lib/x86_64-linux-ghc-8.6.5/COrdering-0.1.0.0-2ovbA1VdM5AFLEKT1pzCG7"
+dynlibdir  = "/home/pablo/.cabal/lib/x86_64-linux-ghc-8.6.5"
+datadir    = "/home/pablo/.cabal/share/x86_64-linux-ghc-8.6.5/COrdering-0.1.0.0"
+libexecdir = "/home/pablo/.cabal/libexec/x86_64-linux-ghc-8.6.5/COrdering-0.1.0.0"
 sysconfdir = "/home/pablo/.cabal/etc"
 
 getBinDir, getLibDir, getDynLibDir, getDataDir, getLibexecDir, getSysconfDir :: IO FilePath
