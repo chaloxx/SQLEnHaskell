@@ -6,9 +6,9 @@ import AST (Env (..))
 -- Modulo para la formación de rutas de acceso
 
 --Obtiene la ruta hacia una BD
-url :: String -> String -> FilePath
-url u n = "DataBase/" ++ u ++ "/" ++ n
+url :: Env -> FilePath
+url e = "DataBase/" ++ (name e)  ++ "/" ++ (dataBase e)
 
 --Obtiene la ruta hacia una tabla
 url' :: Env -> String -> FilePath
-url' e t = (url (name e) (dataBase e)) ++ "/" ++ t
+url' e t = (url e) ++ "/" ++ t

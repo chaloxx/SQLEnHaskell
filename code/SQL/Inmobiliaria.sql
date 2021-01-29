@@ -1,6 +1,9 @@
 SELECT USER pablo alonso;
 USE Inmobiliaria;
-/*DELETE Inmueble WHERE codigo = "Cas0001"*/
+
+DROP ALL TABLE;
+
+
 
 CREATE TABLE Poblacion(
   nombrePoblacion  String,
@@ -18,6 +21,9 @@ CREATE TABLE Zona(
   KEY (nombreZona, nombrePoblacion),
   FOREIGN KEY (nombrePoblacion) REFERENCE Poblacion (nombrePoblacion) ON DELETE CASCADE ON UPDATE CASCADE
 );
+
+
+
 
 CREATE TABLE Inmueble (
   codigo    String,
@@ -44,7 +50,7 @@ CREATE TABLE Limita (
 ) ;
 
 
-
+/*
 CREATE TABLE Persona (
   codigo    Int ,
   nombre    String,
@@ -108,14 +114,30 @@ CREATE TABLE Visitas (
   KEY (codigoInmueble, fechaHora),
   FOREIGN KEY (codigoCliente) REFERENCE Cliente (codigo) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (codigoInmueble) REFERENCE Inmueble (codigo) ON DELETE CASCADE ON UPDATE CASCADE
-)
+);
 
+
+
+
+
+DROP TABLE Poblacion ;
+DROP TABLE Zona ;
+DROP TABLE Inmueble ;
+DROP TABLE Persona ;
+DROP TABLE Vendedor ;
+DROP TABLE Cliente ;
+DROP TABLE Visitas ;
+
+*/
 /*
 
 INSERT  Poblacion ("Rosario", 1500000);
 INSERT  Poblacion ("Casilda", 14000);
 INSERT  Poblacion ("Santa Fe", 500000);
 INSERT  Poblacion ("San Lorenzo", 400000);
+
+
+
 
 INSERT  Zona ("Rosario", "Norte");
 INSERT  Zona ("Rosario", "Sur");
@@ -235,16 +257,16 @@ INSERT  PoseeInmueble (1007, "Stf0005");
 INSERT  PoseeInmueble (1008, "Stf0005");
 INSERT  PoseeInmueble (1008, "Slr0001");
 
-INSERT  Visitas (1011, "Slr0001", "2014-10-29 10:00:00");
-INSERT  Visitas (1012, "Ros0001", "2014-10-29 10:00:00");
-INSERT  Visitas (1011, "Slr0001", "2014-10-28 10:00:00");
-INSERT  Visitas (1012, "Ros0001", "2014-10-28 10:00:00");
-INSERT  Visitas (1015, "Ros0001", "2014-10-15 10:00:00");
-INSERT  Visitas (1016, "Ros0002", "2014-10-15 10:00:00");
-INSERT  Visitas (1013, "Ros0001", "2014-02-01 10:00:00");
-INSERT  Visitas (1013, "Ros0002", "2014-02-02 10:00:00");
-INSERT  Visitas (1013, "Ros0003", "2014-02-03 10:00:00");
-INSERT  Visitas (1001, "Cas0002", "2014-03-01 10:00:00");
-INSERT  Visitas (1018, "Stf0001", "2014-11-06 10:00:00");
-INSERT  Visitas (1018, "Stf0001", "2014-11-08 10:00:00");
+INSERT  Visitas (1011, "Slr0001", 2014-10-29 10:00:00);
+INSERT  Visitas (1012, "Ros0001", 2014-10-29 10:00:00);
+INSERT  Visitas (1011, "Slr0001", 2014-10-28 10:00:00);
+INSERT  Visitas (1012, "Ros0001", 2014-10-28 10:00:00);
+INSERT  Visitas (1015, "Ros0001", 2014-10-15 10:00:00);
+INSERT  Visitas (1016, "Ros0002", 2014-10-15 10:00:00);
+INSERT  Visitas (1013, "Ros0001", 2014-02-01 10:00:00);
+INSERT  Visitas (1013, "Ros0002", 2014-02-02 10:00:00);
+INSERT  Visitas (1013, "Ros0003", 2014-02-03 10:00:00);
+INSERT  Visitas (1001, "Cas0002", 2014-03-01 10:00:00);
+INSERT  Visitas (1018, "Stf0001", 2014-11-06 10:00:00);
+INSERT  Visitas (1018, "Stf0001", 2014-11-08 10:00:00)
 */

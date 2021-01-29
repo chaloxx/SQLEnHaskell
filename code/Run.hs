@@ -1,7 +1,7 @@
 module Run where
 import SqlParse (sqlParse)
 import AST
-import DdlFunctions (createTable,dropTable,showTable,createDataBase,dropDataBase)
+import DdlFunctions (createTable,dropTable,showTable,createDataBase,dropDataBase,dropAllTable)
 import DmlFunctions
 import Url
 import Control.Exception
@@ -67,10 +67,12 @@ runDdl1 e cmd = case cmd of
   (CBase b) -> aux e $ createDataBase b e
   (DBase b) -> aux e $ dropDataBase b e
   (DTable t) -> runDdl2 e $ dropTable e t
+  (DAllTable) -> runDdl2 e $ dropAllTable e
   (CTable n c) -> runDdl2 e $  createTable e n c
-  (Use b) -> do v <- doesDirectoryExist (url (name e) b)
+  (Use b) -> do let e' = e {dataBase=b}
+                v <- doesDirectoryExist $ url e
                 if v then do putStrLn $ "Usando la base " ++ b
-                             return (Env (name e) b (source e))
+                             return e'
                 else do putStrLn $ "La base " ++ b ++ " no existe"
                         return e
 

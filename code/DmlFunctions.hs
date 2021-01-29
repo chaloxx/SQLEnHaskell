@@ -35,7 +35,7 @@ import Prelude hiding (fail,lookup)
 
 ---- Insertar en una tabla
 insert :: Env -> TableName -> AVL ([Args]) ->  IO ()
-insert e n entry = do let (r,u) = (url (name e) (dataBase e) ++ "/") ||| name e
+insert e n entry = do let (r,u) = ((url e) ++ "/") ||| name e
                       -- Calcular metadata
                       inf <- loadInfoTable ["scheme","types","key","fkey","haveNull"] e n :: IO [TableInfo]
                       case inf of
@@ -91,7 +91,7 @@ toText (x:xs) = (show x) ++ " , " ++ (toText xs)
 -- Borrar aquellos registros de una tabla para los cuales exp es verdadero
 delete :: Context -> String ->  BoolExp -> IO ()
 delete g n exp = do let e = fst' g
-                    let r = url' e n
+                    let r = (url  e)  ++ "/"
                     let u = name (fst' g)
                     res <- obtainTable r n
                     case res of
@@ -104,7 +104,7 @@ delete g n exp = do let e = fst' g
                                      a <- ioEitherFilterT (fun k g n xs xs' ys ys' zs zs') t
                                      case a of
                                        Left msg -> putStrLn msg
-                                       Right t' ->  reWrite t' r
+                                       Right t' ->  reWrite t' $ r ++ n
 
          -- Filtro complicado (evalua expresión booleana y chequea restricciones para cada registro)
   where  fun k g n xs xs' ys ys' zs zs' reg =
@@ -118,7 +118,6 @@ delete g n exp = do let e = fst' g
                                       case rt of
                                         Left msg -> retFail msg -- Error si se intentan borrar registros que son referenciados
                                         _ ->  do resolCascades (fst' g) ys ys' k  (filterT (fun2 k reg))  reg -- Si la restricción es cascades borrar todos los registros que apunten a reg
-                                                 error "Aca llega"
                                                  resolNull (fst' g) zs zs' k reg -- Si la restricción es nullifies nulificar todos los registros que apunten a reg (si aceptan nulos)
                                                  retOk False
 
@@ -174,16 +173,17 @@ resolNull e (n:ns) (t:ts) k x = do let (t',r) = mapT (fun k x) t ||| url' e n
 -- Actualizar tabla n (primer nivel)
 update :: Context -> String -> ([String],[Args]) -> BoolExp -> IO ()
 update g n (fields,values) exp =
-   do let r = url' (fst' g) n -- obtener ruta de tabla
-      [TS sch,TT typ,TR ref,TK key,HN nulls] <- loadInfoTable ["scheme","types","refBy","key","haveNull"] (fst' g) n -- cargar esquemas y tipos
-      update' g (fields,values) sch typ r n exp ref key nulls
+      let e = fst' g
+          r = url e ++ "/" in
+          do  [TS sch,TT typ,TR ref,TK key,HN nulls] <- loadInfoTable ["scheme","types","refBy","key","haveNull"] e n -- cargar esquemas y tipos
+              update' g (fields,values) sch typ r n exp ref key nulls
 
 -- Actualizar tabla (segundo nivel)
 update' g (fields,values) sch typ r n exp ref key nulls =
   let types = fromList $ zip sch typ
       h = singleton n types
       at = trd' $ updateContext3 g h
-      types' = map (\x -> types ! x) key
+      types' = map (\x -> types ! x) fields
       setKeys = toSet key
       setFields = toSet fields
       setScheme = toSet sch in
@@ -194,40 +194,41 @@ update' g (fields,values) sch typ r n exp ref key nulls =
               Right _ -> do  res <- obtainTable r n -- cargar tabla
                              case res of
                               Nothing -> putStrLn "Error al cargar tabla..."
-                              Just t -> do let vals = fromList $ zip key values
-                                           let (xs,ys,zs) = partRefTable ref
-                                           xs' <- obtainTableList (fst' g) xs
+                              Just t -> let vals = fromList $ zip fields values
+                                            (xs,ys,zs) = partRefTable ref in
+                                        do xs' <- obtainTableList (fst' g) xs
                                            ys' <- obtainTableList (fst' g) ys
                                            zs' <- obtainTableList (fst' g) zs
-                                           res' <- ioEitherMapT (change nulls key n g exp vals xs xs' ys ys' zs zs' ) t
+                                           res' <- ioEitherMapT (updateValue nulls key n g exp vals xs xs' ys ys' zs zs' ) t
                                            case res' of
-                                              Right t' -> reWrite t' r
+                                              Right t' -> reWrite t' $ r ++ n
                                               Left msg -> putStrLn msg
 
                  -- Función para modificar valores en registro x
            where toSet = S.fromList
                  -- Función para modificar los valores de aquellos registros para los cuales exp es un predicado válido
-                 change nulls k s g exp vals xs xs' ys ys' zs zs' x =
+                 updateValue nulls k s g exp vals xs xs' ys ys' zs zs' x =
                     do let r = singleton s x
+                       -- Evaluar expresion con un contexto actualizado
                        h <- evalBoolExp [s] (updateContext2 g r) exp
                        case h of
                          Left msg -> retFail msg
                          Right b ->  if b then do a <- resolRestricted xs xs' k x
                                                   case a of
                                                    Left msg -> retFail msg
-                                                   _ -> do resolCascades (fst' g) ys ys' k (mapT (fun2 nulls vals k x)) x
+                                                   _ -> do resolCascades (fst' g) ys ys' k (mapT (funMap2 nulls vals k x)) x
                                                            resolNull (fst' g) zs zs' k x
-                                                           retOk $ mapWithKey (fun nulls vals) x
+                                                           retOk $ mapWithKey (funMap nulls vals) x
                                      else retOk x
 
                           -- Actualiza el valor del atributo k
-                    where fun nulls vals k v = case lookup k vals of
+                    where funMap nulls vals k v = case lookup k vals of
                                                 Nothing -> v
                                                 Just Nulo -> if belong nulls k then Nulo
                                                              else v
                                                 Just v' -> v'
-                          fun2 nulls vals k x y = case c2 k x y of
-                                                    EQ -> mapWithKey (fun nulls vals) y
+                          funMap2 nulls vals k x y = case c2 k x y of
+                                                    EQ -> mapWithKey (funMap nulls vals) y
                                                     _ -> y
 
 
@@ -655,17 +656,17 @@ prod' e (As (Field n1) (Field n2)) = pattern (prod' e (Field n1))
                                                                  in (g',n2,fields,t))
 
 -- Tercer caso : Tabla comun
-prod' e (Field n) = let (path,user) = (url  (name e) (dataBase e)++"/") ||| name e
-                    in do res <- obtainTable path n
-                          case res of
-                           Nothing -> errorProd n
-                           Just t -> do inf <- loadInfoTable ["scheme","types"] e n-- Obtener esquema y tipos
-                                        case inf of
-                                         [] -> errorProd n
-                                         [TS scheme, TT types] -> let types1 = singleton n (fromList $ zip scheme types)
-                                                                      fieldsTree = singleton n $ fromList $ map (\x -> (x,Nulo)) scheme
-                                                                      g = (e,fieldsTree,types1)
-                                                                  in retOk  (g ,n ,scheme,t)
+prod' e (Field n) = let (path,user) = (url  e) ||| name e
+                    in do inf <- loadInfoTable ["scheme","types"] e n-- Obtener esquema y tipos
+                          case inf of
+                               [] -> errorProd n
+                               [TS scheme, TT types] -> do res <- obtainTable path n
+                                                           case res of
+                                                             Nothing -> errorProd n
+                                                             Just t ->  let types1 = singleton n (fromList $ zip scheme types)
+                                                                            fieldsTree = singleton n $ fromList $ map (\x -> (x,Nulo)) scheme
+                                                                            g = (e,fieldsTree,types1)
+                                                                         in retOk  (g ,n ,scheme,t)
 
 createHMWithNull [] = emptyHM
 createHMWithNull (x:xs) = union (singleton x Nulo) (createHMWithNull xs)

@@ -26,7 +26,7 @@ checkLength l types = if l == length types then exitToInsert types
 -- Chequea que el tipo de los args pasados sea correcto
 checkTyped ::  [Type] -> [Args] -> Either String String
 checkTyped t r = if checkTyped' t r then exitToInsert r
-                 else Left $ "Error de tipo en  " ++ (show r)
+                 else Left $  show t  ++ " " ++ show r --"Error de tipo en  " ++ (show r)
  where checkTyped' [] (x:xs) = False
        checkTyped' _  [] = True
        checkTyped' ys ((Nulo):xs) = checkTyped' ys xs
@@ -48,12 +48,17 @@ checkReference e  ((x,xs,o1,o2):ys) t1 = do res <- loadInfoTable ["key","types",
                                               [TK k,TT typ,TS sch] -> let k' = map (\(_,y) -> y) xs
                                                                           t2 = fromList $ zip sch typ
                                                                       in   if checkAux1 k' k && checkAux2 t1 t2 xs then checkReference e ys t1
-                                                                           else  return False
+                                                                           else  do putStrLn $ show k'
+                                                                                    putStrLn $ show k
+                                                                                    putStrLn $ show xs
+                                                                                    return False
 
-   where checkAux1 k' k = length k == length k' &&  (\x -> elem x k) `all`  k'
+   where  -- k' debe ser subconjunto de k
+         checkAux1 k' k =  (\x -> x `elem` k) `all`  k'
+         -- Los tipos deben coincidir
          checkAux2 _ _ [] = True
          checkAux2 t1 t2 ((x1,x2):xs) = if (t1 ! x1) == (t2 ! x2) then checkAux2 t1 t2 xs
-                                        else False
+                                        else error "Aca entra 3"
 
 
 

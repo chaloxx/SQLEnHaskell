@@ -7,7 +7,7 @@ import Encoding
 import GHCi.ObjLink
 import Data.Typeable (TypeRep)
 import GHC.Paths
-import AST (Symbol,Args(..),Env(..),createInfoRegister,fields,TableInfo(..))
+import AST (Symbol,Args(..),Env(..),createInfoRegister2,fields,TableInfo(..))
 import qualified GHC
 import Data.Maybe
 import Avl
@@ -27,7 +27,7 @@ loadInfoTable :: [String] -> Env -> String -> IO([TableInfo])
 loadInfoTable s e m = do res <- obtainTable syspath "Tables"
                          case res of
                           Nothing -> return []
-                          Just t -> do let reg = createInfoRegister e m
+                          Just t -> do let reg = createInfoRegister2 e m
                                        case search fields reg t of
                                         Nothing -> return []
                                         Just reg' -> return $ map  (\x -> reg' ! x) s

@@ -67,6 +67,7 @@ import Error (errorComOpen,errorComClose)
      CTABLE           {TCTable}
      CBASE            {TCBase}
      DTABLE           {TDTable}
+     DALLTABLE        {TDAllTable}
      DBASE            {TDBase}
      PKEY             {TPkey}
      USE              {TUse}
@@ -128,6 +129,7 @@ SQL :: {SQL}
 SQL :   DML {S1 $1}
       | DDL {S2 $1}
       | MANUSERS {S3 $1}
+      | SQL ';' {$1}
       | SQL ';' SQL  {Seq $1 $3}
       | SRC STR   {Source $2}
 
@@ -333,6 +335,7 @@ ToUpdate :: {([String],[Args])}
 DDL :: {DDL}
     : CTABLE FIELD '('LCArgs')'   {CTable $2 $4}
     | DTABLE FIELD                {DTable $2}
+    | DALLTABLE                   {DAllTable}
     | CBASE FIELD                 {CBase $2}
     | DBASE FIELD                 {DBase $2}
     | USE FIELD                   {Use $2}
@@ -439,6 +442,7 @@ data Token =   TCUser
 
              | TCTable
              | TDTable
+             | TDAllTable
              | TCBase
              | TDBase
              | TStr String
@@ -524,6 +528,7 @@ lexer cont  s = case s of
          ('C':'R':'E':'A':'T':'E':' ':'T':'A':'B':'L':'E':xs) -> \(s1,s2) ->  cont TCTable xs (s1,12 + s2)
          ('C':'R':'E':'A':'T':'E':' ':'D':'A':'T':'A':'B':'A':'S':'E':xs) -> \(s1,s2) -> cont TCBase xs (s1,14 + s2)
          ('D':'R':'O':'P':' ':'T':'A':'B':'L':'E':xs) -> \(s1,s2) -> cont TDTable xs (s1,10 + s2)
+         ('D':'R':'O':'P':' ':'A':'L':'L':' ':'T':'A':'B':'L':'E':xs) -> \(s1,s2) -> cont TDAllTable xs (s1,14 + s2)
          ('D':'R':'O':'P':' ':'D':'A':'T':'A':'B':'A':'S':'E':xs) -> \(s1,s2) -> cont TDBase xs (s1,13 + s2)
          ('S':'H':'O':'W':' ':'D':'A':'T':'A':'B':'A':'S':'E':xs) -> \(s1,s2) -> cont TShowB xs (s1,13 + s2)
          ('S':'H':'O':'W':' ':'T':'A':'B':'L':'E':xs) -> \(s1,s2) -> cont TShowT xs (s1,10 + s2)

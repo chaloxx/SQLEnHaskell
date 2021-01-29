@@ -120,9 +120,13 @@ errorCreateReference = put  "La clave foránea no coincide con la clave de la ta
 
 errorDropTable s = "La tabla " ++ s ++ " no existe.."
 
-imposibleDelete n l = put $ "Imposible borrar, " ++ n ++ "es referenciada por " ++ (tail (fold' l))
+errorDropAllTable = "Error al eliminar todas las tablas"
+
+imposibleDelete n l = put $ "Imposible borrar, " ++ n ++ " es referenciada por " ++ (tail (fold' l))
 
 succesDropTable s = put $ "La tabla " ++ s ++ " fue eliminada con éxito"
+
+succesDropAllTables b  = put $ "Todas las tablas de la base " ++ b ++ " fueron eliminadas con éxito"
 
 succesCreateTable s = put $ "La tabla " ++ s ++ " fue creada con éxito"
 

@@ -1,6 +1,6 @@
 module AST where
 import Avl (AVL(..),mapT,pushL,join,value,left,right,emptyT)
-import qualified Data.HashMap.Strict as HM  (HashMap (..),insert,delete,empty,update,fromList,(!),mapWithKey,keys,map)
+import qualified Data.HashMap.Strict as HM  (HashMap (..),insert,delete,empty,update,fromList,(!),mapWithKey,keys,map,union,singleton)
 import qualified Data.Set as S
 import Data.Hashable
 import Data.Typeable (TypeRep)
@@ -273,6 +273,7 @@ data DDL =
            | DBase BaseName
            | CTable Table [CArgs]
            | DTable FieldName
+           | DAllTable
            | Use BaseName
            | ShowB
            | ShowT
@@ -375,8 +376,8 @@ trd' (x,y,z) = z
 isInt :: RealFrac b => b -> Bool
 isInt x = x - fromInteger(round x) == 0
 
-
-fields = ["owner", "dataBase","tableName"]
+fields0 = ["owner", "dataBase"]
+fields =   fields0 ++ ["tableName"]
 fields2 = fields ++ ["scheme","types","key","fkey","refBy","haveNull"]
 fields3 = fields ++ ["referencedBy"]
 
@@ -385,9 +386,12 @@ belong [] _ = False
 belong (x:xs) y = if x == y then True
                   else belong xs y
 
-createInfoRegister :: Env -> String -> HM.HashMap String TableInfo
-createInfoRegister e n =  HM.fromList $ zip fields [TO (name e), TB (dataBase e),TN n]
+createInfoRegister :: Env -> HM.HashMap String TableInfo
+createInfoRegister e =  HM.fromList $ zip fields0 [TO (name e), TB (dataBase e)]
 
+
+createInfoRegister2 :: Env -> String -> HM.HashMap String TableInfo
+createInfoRegister2 e n =  (createInfoRegister e) `HM.union` (HM.singleton "tableName" (TN n))
 
 
 

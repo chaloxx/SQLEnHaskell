@@ -5,15 +5,15 @@ import System.Directory
 import Control.Exception
 import System.IO.Error hiding (catch)
 import AST (BaseName,CArgs (..),TableInfo(..),Type,Env(..),TableDescript(..),Args,UserInfo(..),
-            Reference,ForeignKey,Tab,fields,fields2,fields3,createInfoRegister,RefOption(..),printTable,show3)
+            Reference,ForeignKey,Tab,fields0,fields,fields2,fields3,createInfoRegister,createInfoRegister2,RefOption(..),printTable,show3)
 import DynGhc (compile)
 import Data.HashMap.Strict (fromList,HashMap,(!),update,lookup,alter,union,adjust)
 import Error (errorCreateTableKeyOrFK,tableExists,errorDropTable,succesDropTable,
               errorCreateReference,succesCreateTable,succesCreateReference,
               errorCheckReference,put,imposibleDelete,errorCreateTableNulls, tableDoesntExist,syspath,
-              baseExist,baseNotExist,tablepath)
+              baseExist,baseNotExist,tablepath,errorDropAllTable,succesDropAllTables)
 import Url
-import Avl ((|||),toTree,deleteT,c2,write,c,isMember,AVL,value,filterT,search,push)
+import Avl ((|||),toTree,deleteT,c2,c3,write,c,isMember,AVL,value,filterT,search,push)
 import DynGhc (appendLine,reWrite)
 import Data.List (elem)
 import DynGhc (obtainTable,loadInfoTable)
@@ -32,16 +32,24 @@ code f (_,_,_,k,_) =   "module " ++ f ++ " where \n" ++
                        "import Data.HashMap.Strict hiding (keys) \n" ++
                        "import Avl (AVL(..),m)\n" ++
                        "import COrdering\n" ++
-                       "keys = " ++ (show k) ++ "\n\n" ++
+                       "keys = " ++ (show k) ++ "\n" ++
                        "upd0 = E"
 
 
 
 deleteFile :: FilePath -> IO ()
-deleteFile e = removeFile e `catch` handleExists
+deleteFile p = removeFile p `catch` handleExists
   where handleExists e
-          | isDoesNotExistError e = error "No existe el archivo"
+          | isDoesNotExistError e = error "Error fatal"
           | otherwise = throwIO e
+
+
+deleteDirectory :: FilePath -> IO ()
+deleteDirectory p = removeDirectoryRecursive p `catch` handleExists
+  where handleExists e
+           | isDoesNotExistError e = error "Error fatal"
+           | otherwise = throwIO e
+
 
 
 
@@ -62,7 +70,7 @@ createDataBase b e = case name e of
                                                                               -- Reemplazar info vieja con info nueva
                                                                               t' = push (fun reg') reg' t
                                                                           in do reWrite t' (syspath ++ "/Users")
-                                                                                createDirectory (url n b)
+                                                                                createDirectory $ url e
 
 
 
@@ -90,7 +98,7 @@ dropDataBase b e = case name e of
                                                                          Nothing -> put "Error fatal3"
                                                                          Just t2 -> do let t2' = filterT fun2 t2
                                                                                        reWrite t2' (syspath ++ "/Tables")
-                                                                                       removeDirectoryRecursive (url (name e) b)
+                                                                                       deleteDirectory $ url $ e {dataBase = b}
 
  where fun2 x = let (TB b') = x ! "dataBase"
                 in b /= b'
@@ -105,19 +113,22 @@ createTable e n c =
  do res <- obtainTable syspath "Tables" :: IO (Maybe (AVL (HashMap String TableInfo)))
     case res of
       Nothing -> putStrLn "Error Fatal al crear tabla"
-      Just t -> do let reg = createInfoRegister e n
+      Just t -> do let reg = createInfoRegister2 e n
                     -- Existe alguna tabla?
                    if isMember fields reg t then tableExists n
                    else do let (q@(scheme,types,nulls,k,fk),r) = collect c ||| url' e n
+                           let (setNulls,setScheme) = toSet nulls ||| toSet scheme
+                           let (setKey,setFKFields) = toSet k ||| toSet [x | (_,xs,_,_) <- fk,(x,_) <- xs]
                            let setFKNulls = toSet [x | (_,xs,s1,s2) <- fk,(x,_) <- xs,s1 == Nullifies || s2 == Nullifies ]
-                           let setNulls = toSet nulls
-                           let setScheme = toSet scheme
-                           let setKey = toSet k
-                           let setFKFields = toSet [x | (_,xs,_,_) <- fk,(x,_) <- xs]
+                           -- La clave no puede ser nula
                            -- La clave y la clave foránea son parte del esquema?
-                           if isSubset setKey setNulls || (not $ isSubset setFKNulls setNulls) then errorCreateTableNulls
-                           else if k == [] || (not $ isSubset setKey setScheme) || ( not $ isSubset setFKFields  setScheme) then errorCreateTableKeyOrFK
-                                 else do b <- checkReference e fk (fromList $ zip scheme types) --- Chequeos de seguridad
+                           if  setKey `isSubset` setNulls || (not $ setFKNulls `isSubset` setNulls) then errorCreateTableNulls
+                           else -- Tiene que haber una clave
+                                -- La clave tiene que ser parte del esquema
+                                -- Las claves foraneas tienen que ser parte del esquema
+                               if k == [] || (not $ setKey `isSubset` setScheme) ||  (not $ setFKFields `isSubset`  setScheme) then errorCreateTableKeyOrFK
+                               else --- Las referencias deben ser correctas
+                                      do b <- checkReference e fk (fromList $ zip scheme types)
                                          if not b  then errorCheckReference
                                          else do d1 <- createReference n e fk
                                                  let hs = r ++ ".hs"
@@ -149,7 +160,7 @@ createReference n e ((x,xs,o1,o2):ys) =
   do res <- obtainTable syspath "Tables"
      case res of
       Nothing -> error "Error Fatal"
-      Just t ->  do let reg = createInfoRegister e  x
+      Just t ->  do let reg = createInfoRegister2 e  x
                     -- Reemplaza en el árbol t el registro correspondiente
                     let t' = write  (fun (n,o1,o2) fields reg) t
                     reWrite t' tablepath
@@ -165,12 +176,23 @@ createReference n e ((x,xs,o1,o2):ys) =
 
 
 
+dropAllTable :: Env -> IO()
+dropAllTable e = do res <- obtainTable "DataBase/system/" "Tables"
+                    case res of
+                     Nothing -> putStrLn "Error fatal"
+                     Just t -> do  let reg = createInfoRegister e
+                                   let t' = filterT (c3 fields0 reg) t :: AVL (HashMap String TableInfo)
+                                   let path  = url e
+                                   deleteDirectory path
+                                   createDirectory path
+                                   reWrite t' tablepath
+                                   succesDropAllTables (dataBase e)
 
 
 
 
 dropTable :: Env -> String -> IO ()
-dropTable e n = do res <- obtainTable tablepath "Tables"
+dropTable e n = do res <- obtainTable "DataBase/system/" "Tables"
                    case res of
                      Nothing -> putStrLn "Error fatal"
                      Just t -> do inf <- loadInfoTable ["refBy","fkey"] e n
@@ -184,7 +206,7 @@ dropTable e n = do res <- obtainTable tablepath "Tables"
   -- segundo nivel de dropTable
   dropTable' l e n t  =
               do t' <- removeReferences e t n l
-                 let reg = createInfoRegister e n
+                 let reg = createInfoRegister2 e n
                  case deleteT  (c2 fields reg) t' of
                    Nothing -> putStrLn $ errorDropTable n
                    Just t'' -> do reWrite t'' tablepath

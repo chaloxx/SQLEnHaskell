@@ -11,16 +11,16 @@
   (major1) == 0 && (major2) == 1 && (minor) <= 0)
 #endif /* MIN_VERSION_AST */
 
-/* package Avl-Tree-0.1.0.0 */
-#ifndef VERSION_Avl_Tree
-#define VERSION_Avl_Tree "0.1.0.0"
-#endif /* VERSION_Avl_Tree */
-#ifndef MIN_VERSION_Avl_Tree
-#define MIN_VERSION_Avl_Tree(major1,major2,minor) (\
+/* package Avl-0.1.0.0 */
+#ifndef VERSION_Avl
+#define VERSION_Avl "0.1.0.0"
+#endif /* VERSION_Avl */
+#ifndef MIN_VERSION_Avl
+#define MIN_VERSION_Avl(major1,major2,minor) (\
   (major1) <  0 || \
   (major1) == 0 && (major2) <  1 || \
   (major1) == 0 && (major2) == 1 && (minor) <= 0)
-#endif /* MIN_VERSION_Avl_Tree */
+#endif /* MIN_VERSION_Avl */
 
 /* package base-4.12.0.0 */
 #ifndef VERSION_base
@@ -221,10 +221,10 @@
 #endif /* MIN_TOOL_VERSION_strip */
 
 #ifndef CURRENT_PACKAGE_KEY
-#define CURRENT_PACKAGE_KEY "AST-0.1.0.0-GvgdNh7zL8SBXeeb7osWwz"
+#define CURRENT_PACKAGE_KEY "AST-0.1.0.0-HnUGpkWgT633dYooFIiK2e"
 #endif /* CURRENT_PACKAGE_KEY */
 #ifndef CURRENT_COMPONENT_ID
-#define CURRENT_COMPONENT_ID "AST-0.1.0.0-GvgdNh7zL8SBXeeb7osWwz"
+#define CURRENT_COMPONENT_ID "AST-0.1.0.0-HnUGpkWgT633dYooFIiK2e"
 #endif /* CURRENT_COMPONENT_ID */
 #ifndef CURRENT_PACKAGE_VERSION
 #define CURRENT_PACKAGE_VERSION "0.1.0.0"
