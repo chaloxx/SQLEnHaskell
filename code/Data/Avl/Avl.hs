@@ -23,12 +23,45 @@ a ||| b = (a,b)
 
 
 
-
 data AVL e = E                      -- ^ Empty Tree
            | N (AVL e) e (AVL e)    -- ^ BF=-1 (right height > left height)
            | Z (AVL e) e (AVL e)    -- ^ BF= 0
            | P (AVL e) e (AVL e)    -- ^ BF=+1 (left height > right height)
            deriving(Eq,Ord,Show,Read,Foldable)
+
+
+
+
+-- Funciones de comparacion
+
+-- Comparar 2 registros (devuelve un COrdering)
+c ::Ord v => [String] -> HashMap String v -> HashMap String v -> COrdering (HashMap String v)
+c [] _ y = Eq y
+c (k:ks) x y =  let (v1,v2) =  (lookup k x,lookup k y) in
+                if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
+                                                  LT -> Lt
+                                                  GT -> Gt
+                                                  EQ -> c ks x y
+                else error $  "No se encontro el atributo " ++ (show k)
+
+-- Compara 2 registros (devuelve un Ordering)
+c2 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Ordering
+c2 [] _ _ = EQ
+c2 (k:ks) x y  = let (v1,v2) =  (lookup k x,lookup k y) in
+                 if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
+                                                  LT -> LT
+                                                  GT -> GT
+                                                  EQ -> c2 ks x y
+                 else error "Error fatal"
+
+-- Comparar 2 registros y devolver un bool
+c3 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Bool
+c3 k x y = case c2 k x y of
+             EQ -> False
+             _ -> True
+
+
+
 
 
 
@@ -697,35 +730,6 @@ spliceRNZ _ _ _    _ _ _  _   E              = error "spliceRNZ: Bug1"
 
 
 
-
-
-
-
--- Comparar 2 registros (devuelve un COrdering)
-c ::Ord v => [String] -> HashMap String v -> HashMap String v -> COrdering (HashMap String v)
-c [] _ y = Eq y
-c (k:ks) x y =  let (v1,v2) =  (lookup k x,lookup k y) in
-                if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
-                                                  LT -> Lt
-                                                  GT -> Gt
-                                                  EQ -> c ks x y
-                else error $  "No se encontro el atributo " ++ (show k)
-
--- Compara 2 registros (devuelve un Ordering)
-c2 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Ordering
-c2 [] _ _ = EQ
-c2 (k:ks) x y  = let (v1,v2) =  (lookup k x,lookup k y) in
-                 if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
-                                                  LT -> LT
-                                                  GT -> GT
-                                                  EQ -> c2 ks x y
-                 else error "Error fatal"
-
--- Comparar 2 registros y devolver un bool
-c3 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Bool
-c3 k x y = case c2 k x y of
-             EQ -> False
-             _ -> True
 
 
 

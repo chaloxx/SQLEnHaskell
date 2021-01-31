@@ -170,8 +170,8 @@ fold' = foldl (\ x y -> x ++ "," ++ y) ""
 
 msg = "Error buscando el objeto"
 
--- Realiza una busqueda en g a partir de una lista y:ys y  v
-lookupList ::Show b => HashMap String (HashMap String b) -> [String] -> String -> Either String b
+-- Realiza una busqueda en g a partir de una lista de nombres de tablas y de un nombre de columna
+--lookupList ::Show b => HashMap String (HashMap String b) -> [String] -> String -> Either String b
 lookupList _ [] v = errorFind v
 lookupList g q@(y:ys) v = case lookup y g of
                            Nothing -> error $ show g

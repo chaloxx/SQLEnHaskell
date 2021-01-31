@@ -5,7 +5,7 @@
 module Check where
 
 import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,TabTypes,ForeignKey,Env,RefOption(..),(////),Types
-            ,show2,TableInfo(..))
+            ,show2,TableInfo(..),Key)
 import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,lookupList,errorForeignKey,ok)
 import Data.HashMap.Strict hiding (map)
 import Avl (isMember)
@@ -48,10 +48,7 @@ checkReference e  ((x,xs,o1,o2):ys) t1 = do res <- loadInfoTable ["key","types",
                                               [TK k,TT typ,TS sch] -> let k' = map (\(_,y) -> y) xs
                                                                           t2 = fromList $ zip sch typ
                                                                       in   if checkAux1 k' k && checkAux2 t1 t2 xs then checkReference e ys t1
-                                                                           else  do putStrLn $ show k'
-                                                                                    putStrLn $ show k
-                                                                                    putStrLn $ show xs
-                                                                                    return False
+                                                                           else  return False
 
    where  -- k' debe ser subconjunto de k
          checkAux1 k' k =  (\x -> x `elem` k) `all`  k'
@@ -85,6 +82,9 @@ checkTypeBoolExp e@(Or exp1 exp2) s types = checkTypeBoolExp'' exp1 exp2 s types
 checkTypeBoolExp e@(Less exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
 checkTypeBoolExp e@(Great exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
 checkTypeBoolExp e@(Equal exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
+checkTypeBoolExp e@(NEqual exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
+checkTypeBoolExp e@(GEqual exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
+checkTypeBoolExp e@(LEqual exp1 exp2) s types = checkTypeBoolExp' exp1 exp2 s types e
 checkTypeBoolExp _ _ _ = return Bool
 
 checkTypeBoolExp'' exp1 exp2 s types e  = do (t1,t2) <- checkTypeBoolExp exp1 s types //// checkTypeBoolExp exp2 s types
@@ -138,11 +138,14 @@ checkTypeExp'' _ e = typeError $ (show e)
 
 
 -- Chequear que la clave foránea apunta a una clave existente
-checkForeignKey :: Env -> Reg -> [([(String,String)],Maybe Tab)] -> Either String String
+checkForeignKey :: Env -> Reg -> [([(String,String)],Maybe Tab,Key)] -> Either String String
 checkForeignKey _ _ []  = return ""
-checkForeignKey _ _ ((_,Nothing):_) = fail "Error fatal"
-checkForeignKey e r ((xs,(Just t)):ys)  = let k = map (\(_,y) -> y) xs -- Obtener la key de t
-                                              r' = fromList $ map (\(x,y) -> (y,r ! x)) xs -- Existe la clave en t?
+checkForeignKey _ _ ((_,Nothing,_):_) = fail "Error fatal"
+checkForeignKey e r ((xs,(Just t),key):ys)  = let k' = map (\(_,y) -> y) xs -- Obtener referencia de la clave foránea
+                                                  k = [w | w <- key, w `elem` k']
+                                              -- Calcular un registro con los valores de la clave foránea
+                                              -- Fijarse que la clave exista
+                                                  r' = fromList $ map (\(x,y) -> (y,r ! x)) xs
                                           in if isMember k r' t then checkForeignKey e r ys
                                              else error $ show r
 

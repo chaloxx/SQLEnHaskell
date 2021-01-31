@@ -33,7 +33,7 @@ CREATE TABLE Inmueble (
   nombreP  String,
   nombreZ       String,
   KEY (codigo),
-  FOREIGN KEY (nombreP,nombreZ) REFERENCE Zona (nombrePoblacion,nombreZona) ON DELETE CASCADE ON UPDATE CASCADE
+  FOREIGN KEY (nombreZ,nombreP) REFERENCE Zona (nombreZona,nombrePoblacion) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 
@@ -50,7 +50,7 @@ CREATE TABLE Limita (
 ) ;
 
 
-/*
+
 CREATE TABLE Persona (
   codigo    Int ,
   nombre    String,
@@ -79,10 +79,10 @@ CREATE TABLE Cliente (
 
 
 CREATE TABLE Propietario (
-  codigo  Int,
+  codigoP  Int,
   dni     Int NULL,
-  KEY (codigoPropietario),
-  FOREIGN KEY (codigoPropietario) REFERENCE Persona (codigo) ON DELETE CASCADE ON UPDATE CASCADE
+  KEY (codigoP),
+  FOREIGN KEY (codigoP) REFERENCE Persona (codigo) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 
@@ -93,7 +93,7 @@ CREATE TABLE PoseeInmueble (
   codigoProp  Int,
   codigoInmueble     String,
   KEY (codigoProp, codigoInmueble),
-  FOREIGN KEY (codigoProp) REFERENCE Propietario (codigoPropietario) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (codigoProp) REFERENCE Propietario (codigoP) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (codigoInmueble) REFERENCE Inmueble (codigo)   ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -101,7 +101,7 @@ CREATE TABLE PrefiereZona (
   codigoCliente    Int,
   nombreP  String,
   nombreZ  String,
-  KEY (codigoCliente, nombrePoblacion, nombreZona),
+  KEY (codigoCliente, nombreP, nombreZ),
   FOREIGN KEY (codigoCliente) REFERENCE Persona (codigo) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (nombreP,nombreZ) REFERENCE Zona (nombrePoblacion,nombreZona) ON DELETE CASCADE ON UPDATE CASCADE
 );
@@ -117,19 +117,6 @@ CREATE TABLE Visitas (
 );
 
 
-
-
-
-DROP TABLE Poblacion ;
-DROP TABLE Zona ;
-DROP TABLE Inmueble ;
-DROP TABLE Persona ;
-DROP TABLE Vendedor ;
-DROP TABLE Cliente ;
-DROP TABLE Visitas ;
-
-*/
-/*
 
 INSERT  Poblacion ("Rosario", 1500000);
 INSERT  Poblacion ("Casilda", 14000);
@@ -236,6 +223,7 @@ INSERT  Propietario (1007, 20777999);
 INSERT  Propietario (1008, 20778000);
 
 INSERT  PoseeInmueble (1003, "Ros0001");
+
 INSERT  PoseeInmueble (1003, "Ros0002");
 INSERT  PoseeInmueble (1002, "Ros0003");
 INSERT  PoseeInmueble (1002, "Ros0004");
@@ -268,5 +256,4 @@ INSERT  Visitas (1013, "Ros0002", 2014-02-02 10:00:00);
 INSERT  Visitas (1013, "Ros0003", 2014-02-03 10:00:00);
 INSERT  Visitas (1001, "Cas0002", 2014-03-01 10:00:00);
 INSERT  Visitas (1018, "Stf0001", 2014-11-06 10:00:00);
-INSERT  Visitas (1018, "Stf0001", 2014-11-08 10:00:00)
-*/
+INSERT  Visitas (1018, "Stf0001", 2014-11-08 10:00:00);

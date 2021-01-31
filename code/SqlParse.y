@@ -34,6 +34,9 @@ import Error (errorComOpen,errorComClose)
      INTERSECT        {TIntersect}
      AND              {TAnd}
      OR               {TOr}
+     NE               {TNEqual}
+     GE               {TGEqual}
+     LE               {TLEqual}
      '='              {TEqual}
      '>'              {TGreat}
      '<'              {TLess}
@@ -184,6 +187,7 @@ Query6 : HAVING BoolExpH Query7 {Having $2 $3}
 
 
 Query7 : ORDERBY ArgF Order Query8   {OrderBy $2 $3 $4}
+      | ORDERBY ArgF Query8          {OrderBy $2 A $3}
       | Query8 {$1}
 
 Query8 : LIMIT NUM  {Limit $2 End}
@@ -229,7 +233,10 @@ BoolExpW :: {BoolExp}
          : BoolExpW AND BoolExpW     {And $1 $3}
          | '(' BoolExpW ')'          {$2}
          | BoolExpW OR  BoolExpW     {Or $1 $3}
+         | ValueW GE ValueW          {GEqual $1 $3}
+         | ValueW LE ValueW           {LEqual $1 $3}
          | ValueW '=' ValueW         {Equal $1 $3}
+         | ValueW NE ValueW          {NEqual $1 $3}
          | ValueW '>' ValueW         {Great $1 $3}
          | ValueW '<' ValueW         {Less $1 $3}
          | NOT BoolExpW              {Not $2}
@@ -411,8 +418,11 @@ data Token =   TCUser
              | TAnd
              | TOr
              | TEqual
+             | TNEqual
              | TGreat
              | TLess
+             | TGEqual
+             | TLEqual
              | TLike
              | TIn
              | TNot
@@ -499,18 +509,24 @@ lexer cont  s = case s of
          ('U':'N':'I':'O':'N':xs) -> \(s1,s2) -> cont TUnion xs (s1,5 + s2)
          ('I':'N':'T':'E':'R':'S':'E':'C':'T':xs) -> \(s1,s2) -> cont TIntersect xs (s1,9 + s2)
          ('D':'I':'F':'F':xs) -> \(s1,s2) -> cont TDiff xs (s1,5 + s2)
+         ('O':'R':'D':'E':'R':' ':'B':'Y':xs) -> \(s1,s2) -> cont TOrderBy xs (s1,8 + s2)
 
          ('A':'N':'D':xs) -> \(s1,s2) ->  cont TAnd xs (s1,3 + s2)
          ('O':'R':xs) ->  \(s1,s2) ->  cont TOr xs (s1,2 + s2)
          ('N':'O':'T':xs) -> \(s1,s2) ->  cont TNot xs (s1,3 + s2)
          ('L':'I':'K':'E':xs) -> \(s1,s2) ->  cont TLike xs (s1,4 + s2)
-         ('E':'X':'I':'S':'T':xs) -> \(s1,s2) ->  cont TExist xs (s1,5 + s2)
+         ('E':'X':'I':'S':'T':'S':xs) -> \(s1,s2) ->  cont TExist xs (s1,6 + s2)
          ('I':'N':xs) -> \(s1,s2) ->  cont TIn xs (s1,2 + s2)
          ('G':'R':'O':'U':'P':' ':'B':'Y':xs) -> \(s1,s2) ->  cont TGroupBy xs (s1,8 + s2)
+         ('<':'>':xs) -> \(s1,s2) ->  cont TNEqual xs (s1,8 + s2)
+         ('<':'=':xs) -> \(s1,s2) ->  cont TLEqual xs (s1,2 + s2)
+         ('>':'=':xs) -> \(s1,s2) ->  cont TGEqual xs (s1,2 + s2)
          ('=':xs) -> \(s1,s2) ->  cont TEqual xs (s1,1 + s2)
          ('>':xs) -> \(s1,s2) ->  cont TGreat xs (s1,1 + s2)
          ('<':xs) -> \(s1,s2) ->  cont TLess xs (s1,1 + s2)
 
+         ('A':'S':'C':xs) -> \(s1,s2) ->  cont TAsc xs (s1,3 + s2)
+         ('D':'E':'S':'C':xs) -> \(s1,s2) ->  cont TDesc xs (s1,4 + s2)
          ('C':'O':'U':'N':'T':xs) -> \(s1,s2) ->  cont TCount xs (s1,5 + s2)
          ('S':'U':'M':xs) -> \(s1,s2) ->  cont TSum xs (s1,3 + s2)
          ('A':'V':'G':xs) -> \(s1,s2) ->  cont TAvg xs (s1,3 + s2)
@@ -522,8 +538,6 @@ lexer cont  s = case s of
          ('N':'E':'G':xs) -> \(s1,s2) ->  cont TNeg xs (s1,3 + s2)
 
 
-         ('A':'s':'c':xs) -> \(s1,s2) ->  cont TAsc xs (s1,3 + s2)
-         ('D':'e':'s':'c':xs) -> \(s1,s2) ->  cont TDesc xs (s1,4 + s2)
 
          ('C':'R':'E':'A':'T':'E':' ':'T':'A':'B':'L':'E':xs) -> \(s1,s2) ->  cont TCTable xs (s1,12 + s2)
          ('C':'R':'E':'A':'T':'E':' ':'D':'A':'T':'A':'B':'A':'S':'E':xs) -> \(s1,s2) -> cont TCBase xs (s1,14 + s2)
@@ -562,7 +576,8 @@ lexer cont  s = case s of
          ('W':'H':'E':'R':'E':xs) -> \(s1,s2) -> cont TWhere xs (s1,5 + s2)
          ('G':'R':'O':'U':'P':' ':'B':'Y':xs) -> \(s1,s2) -> cont TGroupBy xs (s1,8 + s2)
          ('H':'A':'V':'I':'N':'G':xs) -> \(s1,s2) -> cont THaving xs (s1,6 + s2)
-         ('O':'R':'D':'E':'R':' ':'B':'Y':xs) -> \(s1,s2) -> cont TGroupBy xs (s1,8 + s2)
+
+
          ('L':'I':'M':'I':'T':xs) -> \(s1,s2) -> cont TLimit xs (s1, 5 + s2)
          ('O':'N':xs) -> \(s1,s2) -> cont TOn xs (s1,2 + s2)
 
@@ -584,7 +599,6 @@ lexer cont  s = case s of
          ('*':'/':xs) -> \i -> errorComClose
 
          ('/':xs) -> \(s1,s2) -> cont TDiv xs (s1,1 + s2)
-
 
 
          (';':xs) -> \(s1,s2) -> cont TSemiColon xs (s1,1 + s2)

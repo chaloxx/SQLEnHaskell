@@ -6,6 +6,7 @@ import Data.Hashable
 import Data.Typeable (TypeRep)
 import System.Console.Terminal.Size  (size,width)
 import Data.List.Split
+import Control.Applicative
 
 
 -- Modulo con árboles de sintaxis abstractas y otras definiciones útiles
@@ -13,6 +14,29 @@ import Data.List.Split
 data Date = Date {dayD::Int,monthD::Int,yearD::Int} deriving (Ord,Eq,Show)
 data Time = Time {tHour::Int,tMinute::Int,tSecond::Int} deriving (Ord,Eq,Show)
 data DateTime = DateTime {year::Int,month::Int,day::Int,hour::Int,minute::Int,second::Int} deriving (Ord,Eq,Show)
+
+newtype IOEither a = IOE {resp::IO(Either String a)}
+
+
+instance Functor (IOEither) where
+     fmap f (IOE x) =  IOE (do x' <- x
+                               return $ do x'' <- x'
+                                           return $ f x'')
+
+
+instance Applicative IOEither where
+     pure = return
+     g  <*> x = do func <- g
+                   val <- x
+                   return $ func val
+
+instance Monad IOEither where
+     return a = IOE (return( Right a))
+     (IOE x) >>= f = IOE (do x' <- x
+                             case x' of
+                               Right x'' -> resp(f x'')
+                               Left m -> return $ Left m)
+
 
 
 
@@ -40,12 +64,21 @@ pattern2 res f = do res' <- res
 
 
 
-ioEitherFilterT ::Show e => (e -> IO(Either a Bool)) -> AVL e -> IO(Either a (AVL e))
-ioEitherFilterT _ E = return $ Right E
-ioEitherFilterT f t = pattern  ((ioEitherFilterT f (left t) |||| ioEitherFilterT f (right t)) |||| f (value t))
-                               (\((l,r),b) -> let t' = join l r
-                                              in if b then pushL (value t) t'
-                                                 else t')
+--ioEitherFilterT ::Show e => (e -> IO(Either a Bool)) -> AVL e -> IO(Either a (AVL e))
+-- ioEitherFilterT _ E = return $ Right E
+-- ioEitherFilterT f t = pattern  (f (value t) |||| (ioEitherFilterT f (left t) |||| ioEitherFilterT f (right t)))
+--                                (\(b,(l,r)) -> let t' = join l r
+--                                               in if b then pushL (value t) t'
+--                                                  else t')
+
+ioEitherFilterT ::Show e => (e -> IOEither Bool) -> AVL e -> IOEither(AVL e)
+ioEitherFilterT _ E = return E
+ioEitherFilterT f t = do b <- f (value t)
+                         l <- ioEitherFilterT f (left t)
+                         r <- ioEitherFilterT f (right t)
+                         return $ let t' = join l r in
+                                  if b then pushL (value t) t'
+                                  else t'
 
 
 
@@ -55,6 +88,7 @@ data Env = Env {name :: String, dataBase :: String, source :: String} deriving S
 type Types = HM.HashMap String Type
 type TabTypes = HM.HashMap String Types
 type Vals = HM.HashMap String Args
+type Key = [String]
 -- Definimos el contexto de una consulta
 -- Esto nos permite llevar el estado de una consulta
 -- pues en cualquier momento podemos chequear el tipo de una expresión
@@ -80,7 +114,7 @@ type UserName = String
 -- Consta de 5 componentes:
 -- Un contexto en el cual se ejecuta la consulta
 -- Un booleano para diferenciar si la consulta incluye una claúsula group by (requiere un tratamiento especial)
--- Un par ordenado entre alias de tablas y su nombre
+-- Una lista de nombres de tablas
 -- Una lista de atributos actuales
 -- Una lista de tablas
 type Answer =  (Context,Bool,TableNames,FieldNames,[Tab])
@@ -114,7 +148,7 @@ data TableInfo = TO String | TN String | TS [String] | TT [Type]|  TK [String]
                    | TB String deriving (Show,Eq,Ord)
 
 
---
+-- Clave foránea
 type ForeignKey = [(String,[(String,String)],RefOption,RefOption)]
 type Reference = (String,RefOption,RefOption)
 
@@ -240,8 +274,11 @@ data Aggregate = Min Distinct Args
 data BoolExp =  And BoolExp BoolExp
               | Or  BoolExp BoolExp
               | Equal Args Args
+              | NEqual Args Args
               | Great Args Args
               | Less Args Args
+              | GEqual Args Args
+              | LEqual Args Args
               | Not BoolExp
               | Exist DML
               | InVals Args [Args]
@@ -300,7 +337,7 @@ show3 (TN n) = n
 -- Algunas definiciones útiles
 
 
--- instance (Ord a, Ord v) => Ord (HM.HashMap a v) where
+--instance (Ord a, Ord v) => Ord (HM.HashMap a v) where
 --   t1 <= t2 = t1 == t2 || t1 < t2
 
 
@@ -351,12 +388,16 @@ instance Show Aggregate where
 
 
 instance Show BoolExp where
-  show (Not e) = "NOT " ++ (show e)
+  show (Not e) = "NOT (" ++ (show e) ++ ")"
   show (And e1 e2) = (show e1) ++ " AND " ++ (show e2)
   show (Or e1 e2) = (show e1) ++ " OR " ++ (show e2)
   show (Equal e1 e2) = (show e1) ++ " = " ++ (show e2)
   show (Less e1 e2) = (show e1) ++ " < " ++ (show e2)
   show (Great e1 e2) = (show e1) ++ " > " ++ (show e2)
+  show (GEqual e1 e2) = (show e1) ++ " >= " ++ (show e2)
+  show (LEqual e1 e2) = (show e1) ++ " <= " ++ (show e2)
+  show (Exist dml) =      "EXISTS (" ++ show dml ++ ")"
+  show (NEqual exp1 exp2) =      show exp1 ++ " <> " ++ show exp2
   show (InVals f dml) = (show f) ++ " IN " ++ (show dml)
   show (InQuery f ls) = (show f) ++ " IN " ++ (show ls)
 

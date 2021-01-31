@@ -35,7 +35,7 @@ import Prelude hiding (fail,lookup)
 
 ---- Insertar en una tabla
 insert :: Env -> TableName -> AVL ([Args]) ->  IO ()
-insert e n entry = do let (r,u) = ((url e) ++ "/") ||| name e
+insert e n entry = do let (r,u) = (url e)||| name e
                       -- Calcular metadata
                       inf <- loadInfoTable ["scheme","types","key","fkey","haveNull"] e n :: IO [TableInfo]
                       case inf of
@@ -50,13 +50,14 @@ insert' _ _ _ _ _ _ _ E _= return ()
 insert' e r types scheme nulls k t entry fk =
                                   do --Nro de argumentos recibidos
                                        let l = length scheme
-                                       -- Calcular todas las tablas que son referenciadas por t
-                                       fk' <- sequence $ map  (\(x,xs) -> do let path = url' e x
-                                                                             tree <- obtainTable path x
-                                                                             return (xs,tree))
-                                                                             fk
+                                       let dbPath = url e
+                                       -- Calcular todas las tablas y sus keys que son referenciadas por t
+                                       fkInfo <- sequence $ map  (\(tabName,refs) -> do table <- obtainTable dbPath tabName
+                                                                                        [TK key] <- loadInfoTable ["key"] e tabName
+                                                                                        return (refs,table,key))
+                                                                                        fk
                                        -- Separar entradas válidas de las inválidas a tráves de distintos chequeos
-                                       let (t1,t2) = particionT2 (checks l e types scheme nulls k t fk') (\x -> fromList $ zip scheme x) entry
+                                       let (t1,t2) = particionT2 (checks l e types scheme nulls k t fkInfo) (\x -> fromList $ zip scheme x) entry
                                        -- Filtrar entradas con claves repetidas
                                        let (t3,t4) = repeatKey scheme k t2
                                        -- Escribir modificaciones en archivo fuente
@@ -64,18 +65,18 @@ insert' e r types scheme nulls k t entry fk =
                                        -- Mostrar que entrada son inválidas
                                        sequence_ $ mapT putStrLn  t1
                                        -- Mostrar que entradas contienen claves repetidas
-                                       when (not $ isEmpty t3) (do putStrLn $ "Las siguientes entradas contienen claves repetidas"
+                                       when (not $ isEmpty t3) (do putStrLn $ "Las siguientes entradas contienen claves existentes"
                                                                    sequence_ $ mapT (putStrLn.showAux scheme) t3)
 
 
 
--- Chequeos de seguridad
- where checks l e types scheme nulls k t' fk' x = do checkLength l x -- Cantidad de argumentos
-                                                     checkTyped types x -- Tipos
-                                                     let r = (fromList $ zip scheme x)
-                                                     checkKey t' k r x -- ya existe un registro con la clave k?
-                                                     checkNulls scheme nulls x -- puede haber valores nulos?
-                                                     checkForeignKey e r fk' -- la clave foránea apunta a un registro existente?
+-- Chequeos para mantener la consistencia de la BD
+ where checks l e types scheme nulls k t' fkInfo x = do checkLength l x -- Cantidad de argumentos
+                                                        checkTyped types x -- Tipos
+                                                        let reg = (fromList $ zip scheme x)
+                                                        checkKey t' k reg x -- ya existe un registro con la clave k?
+                                                        checkNulls scheme nulls x -- puede haber valores nulos?
+                                                        checkForeignKey e reg fkInfo -- la clave foránea apunta a un registro existente?
        showAux k x = fold $ map (\entry -> x ! entry ) k
 
 
@@ -91,7 +92,7 @@ toText (x:xs) = (show x) ++ " , " ++ (toText xs)
 -- Borrar aquellos registros de una tabla para los cuales exp es verdadero
 delete :: Context -> String ->  BoolExp -> IO ()
 delete g n exp = do let e = fst' g
-                    let r = (url  e)  ++ "/"
+                    let r = url  e
                     let u = name (fst' g)
                     res <- obtainTable r n
                     case res of
@@ -101,7 +102,7 @@ delete g n exp = do let e = fst' g
                                      xs' <- obtainTableList e xs -- tablas que tienen una referencia de tipo restricted sobre t'
                                      ys' <- obtainTableList e ys -- tablas que tienen una referencia de tipo cascades sobre t'
                                      zs' <- obtainTableList e zs -- tablas que tienen una referencia de tipo nullifies sobre t'
-                                     a <- ioEitherFilterT (fun k g n xs xs' ys ys' zs zs') t
+                                     a <- resp $ ioEitherFilterT (fun k g n xs xs' ys ys' zs zs') t
                                      case a of
                                        Left msg -> putStrLn msg
                                        Right t' ->  reWrite t' $ r ++ n
@@ -112,14 +113,14 @@ delete g n exp = do let e = fst' g
               -- Evaluar expresión booleana de acuerdo a los valores de reg
               res <- evalBoolExp [n] (updateContext2 g r) exp
               case res of
-                Left msg -> retFail msg -- Algo salio mal
-                Right b -> do if not b then retOk True -- Devuelve true si la expr dio falso
+                Left msg -> IOE $ retFail msg -- Algo salio mal
+                Right b -> do if not b then IOE $ retOk True -- Devuelve true si la expr dio falso
                               else do rt <- resolRestricted xs xs' k reg
                                       case rt of
-                                        Left msg -> retFail msg -- Error si se intentan borrar registros que son referenciados
-                                        _ ->  do resolCascades (fst' g) ys ys' k  (filterT (fun2 k reg))  reg -- Si la restricción es cascades borrar todos los registros que apunten a reg
-                                                 resolNull (fst' g) zs zs' k reg -- Si la restricción es nullifies nulificar todos los registros que apunten a reg (si aceptan nulos)
-                                                 retOk False
+                                        Left msg -> IOE $ retFail msg -- Error si se intentan borrar registros que son referenciados
+                                        _ ->  IOE $ do resolCascades (fst' g) ys ys' k  (filterT (fun2 k reg))  reg -- Si la restricción es cascades borrar todos los registros que apunten a reg
+                                                       resolNull (fst' g) zs zs' k reg -- Si la restricción es nullifies nulificar todos los registros que apunten a reg (si aceptan nulos)
+                                                       retOk False
 
                      -- Filtro simple (evalúa igualdad entre registros)
                where fun2 k x y = case c k x y of
@@ -174,7 +175,7 @@ resolNull e (n:ns) (t:ts) k x = do let (t',r) = mapT (fun k x) t ||| url' e n
 update :: Context -> String -> ([String],[Args]) -> BoolExp -> IO ()
 update g n (fields,values) exp =
       let e = fst' g
-          r = url e ++ "/" in
+          r = url e in
           do  [TS sch,TT typ,TR ref,TK key,HN nulls] <- loadInfoTable ["scheme","types","refBy","key","haveNull"] e n -- cargar esquemas y tipos
               update' g (fields,values) sch typ r n exp ref key nulls
 
@@ -269,7 +270,7 @@ obtainValue _ (Dot s2 v) r = case lookupList r [s2] v of
 
 
 
---- Ejecutar consultas
+--- Encolar acciones
 insertCola (n,x) [] = [(n,x)]
 insertCola (n,x) c@((n',x'):xs) = if n < n' then (n',x'): (insertCola (n,x) xs)
                                   else (n,x):c
@@ -371,6 +372,7 @@ runQuery :: Context -> DML -> IO ()
 runQuery g dml = do -- Convertir dml en una secuencia de operadores de álgebra relacional
                     let c = conversion dml
                     --Ejecutar
+                    putStrLn $ show c
                     v <- runQuery' g c
                     case v of
                      Left msg -> putStrLn msg
@@ -490,7 +492,12 @@ runQuery' g ((_,Sigma exp):xs) =
                                         _ -> do res <- ioEitherFilterT (\x-> do res <- return $ divideRegister names (giveMeOnlyFields $ trd' g') x
                                                                                 case res of
                                                                                  Left msg -> retFail msg
-                                                                                 Right r -> do b <- evalBoolExp names (updateContext2 g' r)  exp
+                                                                                 -- Evaluar expresión booleana con un contexto actualizado
+
+                                                                                 Right r -> do let g'' = (updateContext2 g' r)
+                                                                                               putStrLn $ show exp
+                                                                                               b <- evalBoolExp names g''  exp
+                                                                                               putStrLn $ show b
                                                                                                return b) t
 
                                                 case res of
@@ -533,12 +540,12 @@ runQuery' g ((_,Hav exp):xs) = pattern2 (runQuery' g xs)
 runQuery' g ((_,Order ls ord):xs) =
   do r <- runQuery' g xs
      return $ do (g',b,l1,l2,[s]) <- r
-                 let ls' = map show ls
+                 let ls' = map show2 ls
                  case partition (\x -> x `elem` l2) ls'  of
                   (_,[]) -> case ord of
                              A -> ret g' l1 l2 s (compareAsc ls')
                              D -> ret g' l1 l2 s (compareDesc ls')
-                  (_,s) -> errorOrder s
+                  (_,s) -> error $ show ls' ++ " " ++ show l2--error errorOrder s
 
 
   where ret g' l1 l2 t f = do let t' = sortedT f t
@@ -884,20 +891,31 @@ evalBoolExp :: TableNames -> Context -> BoolExp -> IO(Either String Bool)
 evalBoolExp s g (Not exp) = pattern2 (evalBoolExp s g exp)
                                      (\b -> retOk $ not b)
 
-evalBoolExp s g (And exp1 exp2)  = applyEval s g exp1 exp2 (&&)
+evalBoolExp s g (And exp1 exp2)  = do putStrLn $ show exp1 ++ " " ++ show exp2
+                                      applyEval s g exp1 exp2 (&&)
 
 evalBoolExp s g (Or exp1 exp2)   = applyEval s g exp1 exp2 (||)
 
-evalBoolExp s g (Equal exp1 exp2) = return $ evalBoolExp' (==) exp1 exp2 s (snd' g)
+evalBoolExp s g (Equal exp1 exp2) = do  putStrLn "Aca entra"
+                                        return $ evalBoolExp' (==) exp1 exp2 s (snd' g)
 
 evalBoolExp s g (Great exp1 exp2) = return $ evalBoolExp' (>)  exp1 exp2 s (snd' g)
 
 evalBoolExp s g (Less  exp1 exp2) = return $ evalBoolExp' (<)  exp1 exp2 s (snd' g)
 
+evalBoolExp s g (LEqual  exp1 exp2) = return $ evalBoolExp' (<=)  exp1 exp2 s (snd' g)
+
+evalBoolExp s g (NEqual  exp1 exp2) = return $ evalBoolExp' (/=)  exp1 exp2 s (snd' g)
+
+evalBoolExp s g (GEqual  exp1 exp2) = return $ evalBoolExp' (>=)  exp1 exp2 s (snd' g)
+
 
 -- Determina si la consulta dml es vacía en el contexto g
 evalBoolExp s g (Exist dml) = pattern (runQuery' g (conversion  dml))
-                                      (\(_,False,_,_,[t]) -> not (isEmpty t))
+                                      (\(_,False,_,_,[t]) ->  not $ isEmpty t)
+
+
+
 
 -- Determina si el valor referido por el campo v pertenece a l
 evalBoolExp s g (InVals (Field v) l) = pattern (return $ lookupList (snd' g) s v)
@@ -940,7 +958,6 @@ applyEval s g exp1 exp2 op = pattern (evalBoolExp s g exp1 |||| evalBoolExp s g 
 -- Evaluar expresión booleana (2do nivel)
 evalBoolExp' :: (Args -> Args -> Bool) -> Args -> Args -> [String] -> TabReg ->  Either String Bool
 evalBoolExp' o exp1 exp2 s t = do (n1,n2) <- evalIntExp t s exp1 //// evalIntExp t s exp2
-                                  --error $ show n1 ++ " " ++ show n2
                                   return $ o n1 n2
 
       where isFieldOrDot (Field _) = True
