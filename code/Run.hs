@@ -6,7 +6,7 @@ import DmlFunctions
 import Url
 import Control.Exception
 import Data.List (isSuffixOf,dropWhileEnd,nub,sort)
-import Error (errorSource,errorOpen,errorSelUser,errorSelBase)
+import Error (errorSource,errorOpen,errorSelUser,errorSelBase,put,retFail,retMsg)
 import UserFunctions
 import DynGhc (appendLine)
 import qualified Data.HashMap.Strict as H
@@ -18,29 +18,34 @@ parseCmd :: Env ->  String -> IO (Env)
 parseCmd e s = case sqlParse s of
                 Failed msg -> do putStrLn $ (source e) ++ ":" ++ msg
                                  return e
-                Ok cmd ->  runSql e cmd
+                Ok cmd -> do res <- unWrapperQuery e $ runSql cmd
+                             case res of
+                                Left msg  -> do put msg
+                                                return e
+                                Right e'  -> return e'
 
 
 -- Ejecutar comando
-runSql :: Env -> SQL -> IO (Env)
-runSql e (S1 cmd) = runDml e cmd
-runSql e (S2 cmd) = runDdl e cmd
-runSql e (S3 cmd) = runManUser e cmd
-runSql e (Seq cmd1 cmd2) = do e' <- runSql e cmd1
-                              runSql e' cmd2
-runSql e (Source p) = if ".sql" `isSuffixOf` p then read (Env (name e) (dataBase e) p) p `catch` exception p e
-                      else do putStrLn errorSource
-                              return e
+runSql :: SQL -> Query Env
+runSql (S1 cmd) = do runDml cmd
+                     askEnv
+runSql (S2 cmd) = do runDdl cmd
+                     askEnv
+runSql (S3 cmd) = do runManUser cmd
+                     askEnv
+runSql (Seq cmd1 cmd2) = do runSql cmd1
+                            runSql cmd2
+runSql (Source p) =  Q(\c ->   let e = fst' c in
+                               if ".sql" `isSuffixOf` p then do read e p c `catch` exception p
+                               else return $ Left "No es .sql")
+ where read e p c = do s <- readFile p
+                       let s' = process s
+                       e' <- parseCmd e s'
+                       return $ Right (c,e')
 
- where read e p = do s <- readFile p
-                     let s' = process s
-                     e' <- parseCmd e s'
-                     return (Env (name e') (dataBase e') "Estándar Input")
 
-
-       exception p e r = do let err = show (r :: IOException)
-                            putStrLn $ errorOpen p err
-                            return e
+       exception p r = do let err = show (r :: IOException)
+                          return  $ Left $ "Error al leer el archivo " ++ p ++":"++ err
        -- Eliminar saltos de linea y espacios iniciales y finales
        process s = let s' =  dropWhileEnd f s in
                              dropWhile f s'
@@ -49,66 +54,78 @@ runSql e (Source p) = if ".sql" `isSuffixOf` p then read (Env (name e) (dataBase
 
 
 
+
+
 -- Ejecutar funciones de administración de usuarios
-runManUser :: Env -> ManUsers ->  IO (Env)
-runManUser e (CUser u p) = do createUser u p;return e
-runManUser e (SUser u p) = selectUser (source e) u p
-runManUser e (DUser u p) = do deleteUser u p;return e
+runManUser :: ManUsers ->  Query ()
+runManUser (CUser u p) = fromIO $ createUser u p
+
+runManUser (SUser u p) = do  env <- askEnv
+                             fromIO $ selectUser (source env) u p
+
+runManUser (DUser u p) = fromIO $ deleteUser u p
+
 
 
 
 -- Ejecuta un comando DDL
-runDdl :: Env -> DDL -> IO (Env)
-runDdl e cmd = if checkSelectUser e then runDdl1 e cmd
-               else  do putStrLn errorSelUser
-                        return e
+runDdl ::  DDL -> Query Env
+runDdl cmd = do e <- askEnv
+                if checkSelectUser e then do runDdl1 e cmd
+                else  do fromIO $ putStrLn errorSelUser
+                         return e
 
 runDdl1 e cmd = case cmd of
-  (CBase b) -> aux e $ createDataBase b e
-  (DBase b) -> aux e $ dropDataBase b e
+  (CBase b) -> do fromIO $ createDataBase b e
+                  return e
+  (DBase b) -> do fromIO $ dropDataBase b e
+                  return e
   (DTable t) -> runDdl2 e $ dropTable e t
   (DAllTable) -> runDdl2 e $ dropAllTable e
   (CTable n c) -> runDdl2 e $  createTable e n c
   (Use b) -> do let e' = e {dataBase=b}
-                v <- doesDirectoryExist $ url e
-                if v then do putStrLn $ "Usando la base " ++ b
+                v <- fromIO $ doesDirectoryExist $ url e
+                if v then do fromIO $ putStrLn $ "Usando la base " ++ b
                              return e'
-                else do putStrLn $ "La base " ++ b ++ " no existe"
-                        return e
+                else retFail $ "La base " ++ b ++ " no existe"
 
 
-  (ShowB) -> do printDirectory $ "DataBase/" ++ (name e)
-                return e
+  (ShowB) -> retMsg $ "DataBase/" ++ (name e)
 
-  (ShowT) -> do showTable e
+
+  (ShowT) -> do fromIO $ showTable e
                 return e
 
   where quitComa "" = ""
         quitComa (x:xs) = xs
-        aux e f = do f
-                     return e
 
-runDdl2 e f = do if checkSelectBase e then f
-                 else putStrLn errorSelBase
-                 return e
+runDdl2 e f = do if checkSelectBase e then do fromIO f
+                                              askEnv
+
+                 else retFail errorSelBase
+
 
 
 
 
 -- Ejecuta un comando DML chequeando que previamente
 -- se halla seleccionado una base o tabla válida
-runDml :: Env -> DML -> IO (Env)
-runDml e dml = let (b1,b2) = (checkSelectBase e ,checkSelectUser e) in
-               if b1 && b2 then do runDml2 e dml;return e
-               else do if b1 then putStrLn  errorSelUser
-                       else putStrLn errorSelBase;
-                       return e
+runDml :: DML -> Query ()
+runDml dml = do env <- askEnv
+                let (b1,b2) = (checkSelectBase env ,checkSelectUser env)
+                if b1 && b2 then runDml2 dml
+                else do if b1 then retFail errorSelUser
+                        else retFail errorSelBase
 
 
-runDml2 e (Insert m t) = insert e m t
-runDml2 e (Delete m exp) = delete (e,H.empty,H.empty) m exp
-runDml2 e (Update m v exp) = update (e,H.empty,H.empty) m v exp
-runDml2 e q = runQuery (e,H.empty,H.empty) q
+runDml2 :: DML -> Query ()
+runDml2 (Insert m t) = insert  m t
+
+runDml2 (Delete m exp) = delete m exp
+runDml2 (Update m v exp) = update m v exp
+runDml2 q = do  (ys,t) <- runQuery q
+                fromIO $ printTable show2 ys t
+
 
 
 

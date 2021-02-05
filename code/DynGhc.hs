@@ -7,7 +7,7 @@ import Encoding
 import GHCi.ObjLink
 import Data.Typeable (TypeRep)
 import GHC.Paths
-import AST (Symbol,Args(..),Env(..),createInfoRegister2,fields,TableInfo(..))
+import AST (Symbol,Args(..),Env(..),createInfoRegister2,fields,TableInfo(..),Query(..),fromIO,Context)
 import qualified GHC
 import Data.Maybe
 import Avl
@@ -15,7 +15,7 @@ import Data.HashMap.Strict hiding (foldr,map)
 import System.IO
 import Control.DeepSeq
 import Data.Char
-import Error (put,syspath)
+import Error (put,syspath,tableDoesntExist)
 import Prelude hiding (lookup)
 import qualified System.Plugins.Load as Sys
 import System.Directory
@@ -23,14 +23,12 @@ import System.Directory
 
 
 
-loadInfoTable :: [String] -> Env -> String -> IO([TableInfo])
-loadInfoTable s e m = do res <- obtainTable syspath "Tables"
-                         case res of
-                          Nothing -> return []
-                          Just t -> do let reg = createInfoRegister2 e m
-                                       case search fields reg t of
-                                        Nothing -> return []
-                                        Just reg' -> return $ map  (\x -> reg' ! x) s
+loadInfoTable :: [String] -> Env -> String -> Query [TableInfo]
+loadInfoTable s e m = do t <- obtainTable syspath "Tables"
+                         let reg = createInfoRegister2 e m
+                         case search fields reg t of
+                            Nothing -> tableDoesntExist
+                            Just reg' -> return $ map  (\x -> reg' ! x) s
 
 
 
@@ -90,10 +88,12 @@ reWrite t r   = do h <- openFile (r ++ ".hs") ReadMode
                    l `deepseq` reCompile r
 
 
-obtainTable :: FilePath -> String -> IO(Maybe (AVL (HashMap String a)))
-obtainTable r m = do l <- obtainLastLine $ r++m++".hs"
-                     n <- obtainN l ""
-                     load r m ("upd" ++ show n)
+obtainTable :: FilePath -> String -> Query (AVL (HashMap String a))
+obtainTable r m = Q (\c -> do l <- obtainLastLine $ r++m++".hs"
+                              n <- obtainN l ""
+                              load c r m ("upd" ++ show n))
+
+
 
 
 obtainN :: String ->String -> IO (Int)
@@ -103,17 +103,27 @@ obtainN (x:xs) r | isDigit x = obtainN xs (r ++ [x])
 
 
 
-load :: FilePath -> String -> Symbol ->  IO (Maybe a)
-load r m f =  do let path = r ++ m ++ ".o"
-                 initObjLinker(DontRetainCAFs)
-                 loadObj path
-                 resolveObjs
-                 ptr <- lookupSymbol (mangleSymbol Nothing m f)
-                 unloadObj path
-                 case ptr of
-                   Nothing -> error f--return (Nothing)
-                   Just (Ptr addr) -> case addrToAny# addr of
-                     (# t #) -> return $ Just t
+load :: Context -> FilePath -> String -> Symbol ->  IO (Either String (Context,(AVL (HashMap String a))))
+load c r m f  = do res <- load' r m  f
+                   return $ case res of
+                             Nothing -> Left "Algo Hizo"
+                             Just t -> Right (c, t)
+
+
+load' :: FilePath -> String -> Symbol ->  IO (Maybe a)
+load'  r m f =  do  let path = r ++ m ++ ".o"
+                    compile $ r ++ m ++ ".hs"
+                    initObjLinker(DontRetainCAFs)
+                    loadObj path
+                    resolveObjs
+                    ptr <- lookupSymbol (mangleSymbol Nothing m f)
+                    unloadObj path
+                    return $ case ptr of
+                                 Nothing -> Nothing
+                                 Just (Ptr addr) -> case addrToAny# addr of
+                                                    (# t #) -> Just t
+
+
 
 
 

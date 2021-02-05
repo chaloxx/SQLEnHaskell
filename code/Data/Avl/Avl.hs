@@ -35,30 +35,30 @@ data AVL e = E                      -- ^ Empty Tree
 -- Funciones de comparacion
 
 -- Comparar 2 registros (devuelve un COrdering)
-c ::Ord v => [String] -> HashMap String v -> HashMap String v -> COrdering (HashMap String v)
-c [] _ y = Eq y
-c (k:ks) x y =  let (v1,v2) =  (lookup k x,lookup k y) in
-                if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
-                                                  LT -> Lt
-                                                  GT -> Gt
-                                                  EQ -> c ks x y
+comp ::Ord v => [String] -> HashMap String v -> HashMap String v -> COrdering (HashMap String v)
+comp [] _ y = Eq y
+comp (k:ks) x y =  let (v1,v2) =  (lookup k x,lookup k y) in
+                   if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
+                                                     LT -> Lt
+                                                     GT -> Gt
+                                                     EQ -> comp ks x y
                 else error $  "No se encontro el atributo " ++ (show k)
 
 -- Compara 2 registros (devuelve un Ordering)
-c2 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Ordering
-c2 [] _ _ = EQ
-c2 (k:ks) x y  = let (v1,v2) =  (lookup k x,lookup k y) in
+comp2 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Ordering
+comp2 [] _ _ = EQ
+comp2 (k:ks) x y  = let (v1,v2) =  (lookup k x,lookup k y) in
                  if isJust v1  && isJust v2  then case (fromJust v1) `compare` (fromJust v2) of
                                                   LT -> LT
                                                   GT -> GT
-                                                  EQ -> c2 ks x y
+                                                  EQ -> comp2 ks x y
                  else error "Error fatal"
 
 -- Comparar 2 registros y devolver un bool
-c3 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Bool
-c3 k x y = case c2 k x y of
-             EQ -> False
-             _ -> True
+comp3 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Bool
+comp3 k x y = case comp2 k x y of
+                EQ -> False
+                _ -> True
 
 
 
@@ -161,14 +161,6 @@ particionT p t = let ((l1,l2),(r1,r2)) = particionT p (left t) ||| particionT p 
 
 
 
-particionT2 :: (a -> Either c c) -> (a -> b) -> AVL a -> (AVL c,AVL b)
-particionT2 p f E = (E,E)
-particionT2 p f t = let ((l1,l2),(r1,r2)) = (particionT2 p f (left t)) ||| (particionT2 p f (right t))
-                        (l,r) = (join l1 r1) ||| (join l2 r2)
-                        x = value t
-                    in case p x of
-                        Right msg -> ( l, pushL (f x) r)
-                        Left msg -> (pushL msg l,r)
 
 
 toTree :: [a] -> AVL a
@@ -736,23 +728,7 @@ spliceRNZ _ _ _    _ _ _  _   E              = error "spliceRNZ: Bug1"
 
 
 m :: Ord v => [String] -> AVL (HashMap String v) -> AVL (HashMap String v) -> AVL (HashMap String v)
-m k = mergeT (c k)
-
-
--- Mapea un árbol  permitiendo devolver un error
-ioEitherMapT :: (e -> IO(Either a b)) -> AVL e -> IO(Either a (AVL b))
-ioEitherMapT f E = return $ Right E
-ioEitherMapT f t = do l' <- ioEitherMapT f (left t)
-                      r' <- ioEitherMapT f (right t)
-                      v'   <- f $ value t
-                      return $ do l'' <- l'
-                                  r'' <- r'
-                                  v <- v'
-                                  case t of
-                                   (N _ _ _) -> Right $ N l'' v r''
-                                   (Z _ _ _) -> Right $ Z l'' v r''
-                                   (P _ _ _) -> Right $ P l'' v r''
-
+m k = mergeT (comp k)
 
 
 
@@ -761,7 +737,7 @@ ioEitherMapT f t = do l' <- ioEitherMapT f (left t)
 -- Dados los atributos k y un registro x definido sobre los atributos k, chequea si x es parte de algún elemento del árbol t
 isMember :: Ord v => [String] -> HashMap String v -> AVL(HashMap String v) -> Bool
 isMember k _ E = False
-isMember k x t = case c k x  (value t) of
+isMember k x t = case comp k x  (value t) of
                       Eq _  -> True
                       Lt  -> isMember k x (left t)
                       Gt  -> isMember k x (right t)
@@ -773,8 +749,8 @@ repeatKey fields keys t = repeatKey' fields keys t E E
  where
  repeatKey' fields keys E t1 t2 =  (t1,t2)
  repeatKey' fields keys t t1 t2 = let v = value t
-                                      f1 = c keys v
-                                      f2 = c fields v
+                                      f1 = comp keys v
+                                      f2 = comp fields v
                                       (t1',t2') = if isMember keys v t2 then (push f2 v t1,t2)
                                                   else (t1,push f1 v t2)
                                       (t1'',t2'') =  repeatKey' fields keys (left t) t1' t2'
@@ -785,7 +761,7 @@ repeatKey fields keys t = repeatKey' fields keys t E E
 -- Hace una busqueda según los atributos k y los valores v y tal vez devuelve un registro
 search :: Ord v => [String] -> HashMap String v  -> AVL(HashMap String v) -> Maybe (HashMap String v)
 search k _ E = Nothing
-search k x t = case c k x (value t) of
+search k x t = case comp k x (value t) of
                  Eq v -> return v
                  Lt -> search k x (left t)
                  Gt -> search k x (right t)

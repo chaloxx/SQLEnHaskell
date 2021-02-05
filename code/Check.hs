@@ -5,8 +5,9 @@
 module Check where
 
 import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,TabTypes,ForeignKey,Env,RefOption(..),(////),Types
-            ,show2,TableInfo(..),Key)
-import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,lookupList,errorForeignKey,ok)
+            ,show2,TableInfo(..),Key,Query(..),TableName,ErrorMsg)
+import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,lookupList,errorForeignKey,errorCheckTyped,errorCheckLength,retOk,
+              ok,errorCheckNull,errorCheckForeignKey)
 import Data.HashMap.Strict hiding (map)
 import Avl (isMember)
 import System.IO.Unsafe (unsafePerformIO)
@@ -16,31 +17,31 @@ import Url (url')
 import Data.List (sort,intersect)
 
 
+
 -- Chequea que la cantidad de args pasados sea correcta
-checkLength :: Int -> [Args] -> Either String String
-checkLength l types = if l == length types then exitToInsert types
-                      else Left $  (fold types) ++ " tiene demasiados argumentos.."
+checkLength :: Int -> [Args] -> Either ErrorMsg ()
+checkLength l types = if l == length types then return ()
+                      else errorCheckLength $   (fold types)
+
 
 
 
 -- Chequea que el tipo de los args pasados sea correcto
-checkTyped ::  [Type] -> [Args] -> Either String String
-checkTyped t r = if checkTyped' t r then exitToInsert r
-                 else Left $  show t  ++ " " ++ show r --"Error de tipo en  " ++ (show r)
- where checkTyped' [] (x:xs) = False
-       checkTyped' _  [] = True
-       checkTyped' ys ((Nulo):xs) = checkTyped' ys xs
-       checkTyped' (y:ys) (x:xs) = if y == (typeOfArgs x) then checkTyped' ys xs
-                                   else False
+checkTyped ::  [Type] -> [Args] -> Either ErrorMsg ()
+checkTyped [] (x:xs) = errorCheckTyped x
+checkTyped _ [] = return ()
+checkTyped ys ((Nulo):xs) = checkTyped ys xs
+checkTyped (y:ys) (x:xs) = if y == (typeOfArgs x) then checkTyped ys xs
+                           else errorCheckTyped x
 
 
 -- Chequea si la clave del registro  ya existe en la tabla t
-checkKey :: Tab -> [String] -> Reg -> [Args] -> Either String String
+checkKey :: Tab -> [String] -> Reg -> [Args] -> Either ErrorMsg ()
 checkKey t k r x = if isMember k r t then errorKey x
-                   else return ""
+                   else return ()
 
 --- Chequear que las referencias sean válidas
-checkReference :: Env ->  ForeignKey -> HashMap String Type ->  IO (Bool)
+checkReference :: Env ->  ForeignKey -> HashMap String Type ->  Query Bool
 checkReference _  [] _  =  return True
 checkReference e  ((x,xs,o1,o2):ys) t1 = do res <- loadInfoTable ["key","types","scheme"] e x
                                             case res of
@@ -48,7 +49,7 @@ checkReference e  ((x,xs,o1,o2):ys) t1 = do res <- loadInfoTable ["key","types",
                                               [TK k,TT typ,TS sch] -> let k' = map (\(_,y) -> y) xs
                                                                           t2 = fromList $ zip sch typ
                                                                       in   if checkAux1 k' k && checkAux2 t1 t2 xs then checkReference e ys t1
-                                                                           else  return False
+                                                                      else  return False
 
    where  -- k' debe ser subconjunto de k
          checkAux1 k' k =  (\x -> x `elem` k) `all`  k'
@@ -102,6 +103,8 @@ checkTypeBoolExp' exp1 exp2 s types e =
         intOrFloat Float = True
         intOrFloat _ = False
 
+
+checkTypedExpList :: [TableName] -> TabTypes -> [Args] -> Either ErrorMsg ()
 checkTypedExpList _ _ [] = return ()
 checkTypedExpList names types (All:xs) = checkTypedExpList names types xs
 checkTypedExpList names types (arg:xs) = checkTypeExp names types arg >> checkTypedExpList names types xs
@@ -138,25 +141,24 @@ checkTypeExp'' _ e = typeError $ (show e)
 
 
 -- Chequear que la clave foránea apunta a una clave existente
-checkForeignKey :: Env -> Reg -> [([(String,String)],Maybe Tab,Key)] -> Either String String
-checkForeignKey _ _ []  = return ""
-checkForeignKey _ _ ((_,Nothing,_):_) = fail "Error fatal"
-checkForeignKey e r ((xs,(Just t),key):ys)  = let k' = map (\(_,y) -> y) xs -- Obtener referencia de la clave foránea
-                                                  k = [w | w <- key, w `elem` k']
-                                              -- Calcular un registro con los valores de la clave foránea
-                                              -- Fijarse que la clave exista
-                                                  r' = fromList $ map (\(x,y) -> (y,r ! x)) xs
-                                          in if isMember k r' t then checkForeignKey e r ys
-                                             else error $ show r
+checkForeignKey :: Reg -> [([(String,String)],Tab,Key)] -> Either String ()
+checkForeignKey _ []  = return ()
+checkForeignKey r ((xs,t,key):ys)  = let k' = map (\(_,y) -> y) xs -- Obtener referencia de la clave foránea
+                                         k = [w | w <- key, w `elem` k']
+                                        -- Calcular un registro con los valores de la clave foránea
+                                        -- Fijarse que la clave exista
+                                         r' = fromList $ map (\(x,y) -> (y,r ! x)) xs
+                                     in if isMember k r' t then checkForeignKey r ys
+                                        else errorCheckForeignKey
 
 
 
 
 -- Chequear que valores pueden ser nulos
-checkNulls :: [String] -> [String] -> [Args] -> Either String String
-checkNulls [] _ _ = return ""
+checkNulls :: [String] -> [String] -> [Args] -> Either String ()
+checkNulls [] _ _ = return ()
 checkNulls (x:xs) l ((Nulo):rs) = if belong x l then checkNulls xs l rs
-                                  else error $  "No se permite que el valor de " ++ x ++ "sea nulo"
+                                  else Left $  "No se permite que el valor de " ++ x ++ "sea nulo"
   where  belong _ [] = False
          belong s (x:xs) = if s == x then True
                            else belong s xs

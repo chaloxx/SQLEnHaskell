@@ -57,23 +57,25 @@ errorSigma2 = fail $ "El orden de los atributos es inválido.."
 
 errorSigma3 = fail $ "Demasiados atributos en operador IN"
 
-errorGroup s =  fail $ "Atributos " ++ show s ++ " inválidos en GROUP BY"
+errorGroup s =  retFail $ "Atributos " ++ show s ++ " inválidos en GROUP BY"
 
 errorOrder s = fail $ "Atributos " ++ show s ++ " inválidos en ORDER BY"
 
 errorProd s = retFail $ "La tabla " ++ s ++ " no existe"
 
-errorProd2 = retFail "Prohibido usar subconsultas con claúsulas GROUP BY en FROM"
+errorProd2 = retFail "Prohibido usar subconsultas con claúsulas GROUP BY"
 
-errorAs = fail $ "Error en sentencia AS"
+errorAs = retFail $ "Error en sentencia AS"
 
 errorEvalBool s = fail $ "Atributo " ++ s " inválido"
 
 errorFind s = fail $ "No se pudo encontrar el atributo " ++ s
 
+errorExist  = retFail "La consulta es vacía"
+
 typeError e = fail $ "Error de tipo en la expresion " ++ e ++ "\n"
 
-divisionError = fail $ "División por cero"
+divisionError = retFail $ "División por cero"
 
 errorKey x = fail $ "La clave de " ++ (fold x) ++ " ya existe"
 
@@ -85,11 +87,10 @@ errorSelUser = "Primero debe seleccionar un usuario..."
 
 errorSelBase = "Primero debe seleccionar una base de datos..."
 
-welcome u s = do putStrLn $  "Bienvenido " ++ u ++ "!"
-                 return (Env u "" s)
+welcome u s = putStrLn $  "Bienvenido " ++ u ++ "!"
 
-logError u s = do put $ "No existe el usuario " ++ u  ++ " o la contraseña es incorrecta "
-                  return (Env "" "" s)
+
+logError u s = put $ "No existe el usuario " ++ u  ++ " o la contraseña es incorrecta "
 
 baseExist b = put $ "Ya existe la base " ++ b
 baseNotExist b = put $ "No existe la base " ++ b
@@ -108,7 +109,7 @@ errorForeignKey s = fail $ "El valor referenciado " ++ (show s) ++ " no existe"
 
 errorCreateTableKeyOrFK = put "El esquema no posee una clave o la clave foránea no es parte del esquema"
 
-tableDoesntExist = put "La tabla no existe"
+tableDoesntExist = retFail "La tabla no existe"
 
 errorCreateTableNulls = put "Error al designar nulls"
 
@@ -119,6 +120,14 @@ succesCreateReference n s = put $ "Referencia creada entre " ++ n ++ " y " ++ s 
 errorCreateReference = put  "La clave foránea no coincide con la clave de la tabla referenciada"
 
 errorDropTable s = "La tabla " ++ s ++ " no existe.."
+
+errorCheckTyped r =  fail $ "Error de tipo en  " ++ show r
+
+errorCheckLength r =  fail $ r ++ " tiene demasiados argumentos.."
+
+errorCheckNull r = fail $  "No se permite que el valor de " ++ r ++ "sea nulo"
+
+errorCheckForeignKey = fail $ "Error en el chequeo de clave foránea"
 
 errorDropAllTable = "Error al eliminar todas las tablas"
 
@@ -132,7 +141,7 @@ succesCreateTable s = put $ "La tabla " ++ s ++ " fue creada con éxito"
 
 tableExists n = put $ "Ya existe la tabla " ++ n
 
-errorUpdateFields l = put $ "Los atributos " ++ (tail $ foldl (\x y -> x ++ "," ++ y) "" l) ++ " están fuera del esquema o alguno es parte de la clave primaria"
+errorUpdateFields l = retFail $ "Los atributos " ++ (tail $ foldl (\x y -> x ++ "," ++ y) "" l) ++ " están fuera del esquema o alguno es parte de la clave primaria"
 
 errorHav = retFail "No puede haber una claúsula HAVING sin una claúsula GROUP BY"
 errorRestricted x n =  let k = keys x
@@ -147,18 +156,21 @@ errorSet = fail "Error en unión"
 errorSet2 = fail "Relaciones con distinto número de atributos"
 errorSet3 = fail "Atributos con tipos incompatibles"
 
-errorLike = fail "Los argumentos de Like deben ser strings"
+errorLike = retFail "Los argumentos de Like deben ser strings"
 
 fail = Left
-retFail :: String ->  IO(Either String b)
-retFail = return.fail
+retFail :: String ->  Query b
+retFail s  = Q (\c -> return.fail $ s )
+
+retMsg :: String -> Query b
+retMsg s = Q (\c -> return.Left $ s )
 
 put = putStrLn
 
 
 ok = Right
-retOk :: a -> IO(Either String a)
-retOk = return.ok
+retOk :: a -> Query a
+retOk = return
 
 exitToInsert :: [Args] -> Either String String
 exitToInsert s = return $  (fold s) ++ " se inserto correctamente"
@@ -171,7 +183,7 @@ fold' = foldl (\ x y -> x ++ "," ++ y) ""
 msg = "Error buscando el objeto"
 
 -- Realiza una busqueda en g a partir de una lista de nombres de tablas y de un nombre de columna
---lookupList ::Show b => HashMap String (HashMap String b) -> [String] -> String -> Either String b
+lookupList ::Show b => HashMap String (HashMap String b) -> [String] -> String -> Either ErrorMsg b
 lookupList _ [] v = errorFind v
 lookupList g q@(y:ys) v = case lookup y g of
                            Nothing -> error $ show g

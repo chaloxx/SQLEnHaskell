@@ -15,27 +15,82 @@ data Date = Date {dayD::Int,monthD::Int,yearD::Int} deriving (Ord,Eq,Show)
 data Time = Time {tHour::Int,tMinute::Int,tSecond::Int} deriving (Ord,Eq,Show)
 data DateTime = DateTime {year::Int,month::Int,day::Int,hour::Int,minute::Int,second::Int} deriving (Ord,Eq,Show)
 
-newtype IOEither a = IOE {resp::IO(Either String a)}
+newtype Query a = Q {runState::Context -> IO(Either ErrorMsg (Context,a))}
 
 
-instance Functor (IOEither) where
-     fmap f (IOE x) =  IOE (do x' <- x
-                               return $ do x'' <- x'
-                                           return $ f x'')
 
 
-instance Applicative IOEither where
+instance Functor (Query) where
+     fmap f (Q x) =  Q (\c -> do x' <- x c
+                                 return $ case x'  of
+                                            Right (c',x'') -> Right (c',f x'')
+                                            Left m -> Left m)
+
+
+instance Applicative Query where
      pure = return
      g  <*> x = do func <- g
                    val <- x
                    return $ func val
 
-instance Monad IOEither where
-     return a = IOE (return( Right a))
-     (IOE x) >>= f = IOE (do x' <- x
-                             case x' of
-                               Right x'' -> resp(f x'')
-                               Left m -> return $ Left m)
+instance Monad Query where
+   return a = Q (\c -> return $ Right (c,a))
+   (Q a) >>= f = Q (\c ->  a c >>= \r ->
+                           case r of
+                              Right (c',x) -> runState (f x) c'
+                              Left m -> return $ Left m)
+
+
+
+
+-- Actualizar contexto
+updateContext :: Env -> TabReg -> TabTypes -> Query ()
+updateContext e t tp = do updateEnv e
+                          updateVals t
+                          updateTypes tp
+
+-- Actualiza el entorno en el contexto g
+updateEnv ::  Env -> Query ()
+updateEnv e = Q(\c -> (return $ Right  ((e,snd' c,trd' c),())))
+
+
+-- Actualiza los valores de las variables de tupla en el contexto
+updateVals :: TabReg -> Query ()
+updateVals x =  Q(\c -> return $ Right ((fst' c,HM.union x (snd' c),trd' c),()))
+
+-- Actualiza los tipos de las variables de tupla en el contexto
+updateTypes :: TabTypes -> Query ()
+updateTypes y =  Q(\c -> return $ Right ((fst' c,snd' c,HM.union y (trd' c)),()))
+
+
+askContext :: Query Context
+askContext = Q(\c -> return $ Right(c,c))
+
+askEnv :: Query Env
+askEnv = Q(\c -> return $ Right (c,fst' c))
+
+askVals :: Query TabReg
+askVals = Q(\c -> return $ Right (c,snd' c))
+
+askTypes :: Query TabTypes
+askTypes = Q(\c -> return $ Right (c,trd' c))
+
+
+fromEither :: Either ErrorMsg b -> Query b
+fromEither (Left msgError) = Q(\c -> return $ Left msgError)
+fromEither (Right b) = return b
+
+
+fromIO :: IO a -> Query a
+fromIO io = Q(\c -> do a <- io
+                       return $ Right (c,a))
+
+
+unWrapperQuery :: Env -> Query a -> IO(Either ErrorMsg a)
+unWrapperQuery e q = do  let c = (e,emptyHM,emptyHM)
+                         res <- (runState q ) c
+                         return $ fmap (\(_,x)-> x) res
+
 
 
 
@@ -64,14 +119,7 @@ pattern2 res f = do res' <- res
 
 
 
---ioEitherFilterT ::Show e => (e -> IO(Either a Bool)) -> AVL e -> IO(Either a (AVL e))
--- ioEitherFilterT _ E = return $ Right E
--- ioEitherFilterT f t = pattern  (f (value t) |||| (ioEitherFilterT f (left t) |||| ioEitherFilterT f (right t)))
---                                (\(b,(l,r)) -> let t' = join l r
---                                               in if b then pushL (value t) t'
---                                                  else t')
-
-ioEitherFilterT ::Show e => (e -> IOEither Bool) -> AVL e -> IOEither(AVL e)
+ioEitherFilterT ::Show e => (e -> Query Bool) -> AVL e -> Query(AVL e)
 ioEitherFilterT _ E = return E
 ioEitherFilterT f t = do b <- f (value t)
                          l <- ioEitherFilterT f (left t)
@@ -81,23 +129,59 @@ ioEitherFilterT f t = do b <- f (value t)
                                   else t'
 
 
+-- Mapea un árbol
+ioEitherMapT :: (e -> Query b) -> AVL e -> Query (AVL b)
+ioEitherMapT f E = return E
+ioEitherMapT f t = do l' <- ioEitherMapT f (left t)
+                      r' <- ioEitherMapT f (right t)
+                      v <- f $ value t
+                      return $ case t of
+                               (N _ _ _) -> N l' v r'
+                               (Z _ _ _) -> Z l' v r'
+                               (P _ _ _) -> P l' v r'
+
+
+-- Partir un árbol en 2  con transformaciones
+particionT2 :: (a -> Either c ()) -> (a -> b) -> AVL a -> (AVL c,AVL b)
+particionT2 p f E = (E,E)
+particionT2 p f t =  let  (l1,l2) = particionT2 p f (left t)
+                          (r1,r2) = particionT2 p f (right t)
+                          l = join l1 r1
+                          r = join l2 r2
+                          x = value t
+                      in  case p x of
+                            Left errorMsg  -> (pushL errorMsg l,r)
+                            _  -> ( l, pushL (f x) r)
+
+
 
 
 -- Definimos el entorno como el usuario actual, la BD que se está usando y la fuente usada
 data Env = Env {name :: String, dataBase :: String, source :: String} deriving Show
-type Types = HM.HashMap String Type
-type TabTypes = HM.HashMap String Types
-type Vals = HM.HashMap String Args
+-- Tipos de una tabla
+type Types = HM.HashMap FieldName Type
+-- Tipos de varias tablas
+type TabTypes = HM.HashMap TableName Types
+
+-- Representamos los registros de una tabla
+type Reg = HM.HashMap String Args
+-- Registros de varias tablas
+type TabReg = HM.HashMap String Reg
+
+
+
 type Key = [String]
+-- Errores
+type ErrorMsg = String
 -- Definimos el contexto de una consulta
 -- Esto nos permite llevar el estado de una consulta
 -- pues en cualquier momento podemos chequear el tipo de una expresión
 -- o el valor de una variable de tupla
 -- El contexto contiene 3 componentes :
 --  Env (Entorno) : Usuario, base de datos, fuente de datos
--- Types : Campos de cada tabla y los tipos de cada campo
--- Vals : Campos de cada tabla y los valores de cada campo
-type Context = (Env,HM.HashMap String Vals,HM.HashMap String Types )
+-- TabReg : TableName -> FieldName -> Args
+-- TabTypes : TableName -> FieldName -> Type
+type Context = (Env,TabReg,TabTypes)
 
 -- Sinonimos
 type TableName = String
@@ -111,22 +195,20 @@ type Distinct = Bool
 type UserName = String
 
 -- Definimos una answer como una respuesta a una consulta
--- Consta de 5 componentes:
--- Un contexto en el cual se ejecuta la consulta
+-- Consta de 4 componentes:
 -- Un booleano para diferenciar si la consulta incluye una claúsula group by (requiere un tratamiento especial)
 -- Una lista de nombres de tablas
 -- Una lista de atributos actuales
 -- Una lista de tablas
-type Answer =  (Context,Bool,TableNames,FieldNames,[Tab])
+type Answer =  (Bool,TableNames,FieldNames,[Tab])
 -- Con un tabReg almacenamos el valor de los registros de las tablas
 -- cuando los almacenamos dentro de un contexto
-type TabReg = HM.HashMap String Reg
-
--- Representamos los registros de una tabla
-type Reg = HM.HashMap String Args
 
 -- Representamos una Tala
 type Tab = AVL (Reg)
+-- Representamos tablas con metadatos
+type TabsInfo = AVL (HM.HashMap FieldName TableInfo)
+type TabsUserInfo = AVL (HM.HashMap FieldName UserInfo)
 
 -- Descripción de la tabla (columnas,tipos,keys,foreing keys)
 type TableDescript = ([String],[Type],[String],[String],ForeignKey)
@@ -180,6 +262,8 @@ data ManUsers = CUser String String
               | DUser String String
               deriving Show
 
+
+-- Metadatos de usuarios
 data UserInfo = UN String -- Nombre de usuario
               | UP String -- Pass
               | UB [String] -- Bases de datos que pertenecen al usuario
@@ -476,6 +560,6 @@ retHeadOrNull [] = emptyT
 retHeadOrNull tables = head tables
 
 
--- Obtener un HM con los campos de cada tabla
-giveMeOnlyFields :: HM.HashMap a (HM.HashMap b c) -> HM.HashMap a [b]
-giveMeOnlyFields hm = HM.mapWithKey (\k -> \v -> HM.keys v) hm
+-- Obtener los campos de cada tabla
+giveMeOnlyFields :: Query(HM.HashMap TableName FieldNames)
+giveMeOnlyFields = Q(\c -> return $ Right (c,HM.mapWithKey (\k -> \v -> HM.keys v) $ trd' c))

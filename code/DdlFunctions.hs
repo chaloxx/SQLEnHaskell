@@ -5,15 +5,16 @@ import System.Directory
 import Control.Exception
 import System.IO.Error hiding (catch)
 import AST (BaseName,CArgs (..),TableInfo(..),Type,Env(..),TableDescript(..),Args,UserInfo(..),
-            Reference,ForeignKey,Tab,fields0,fields,fields2,fields3,createInfoRegister,createInfoRegister2,RefOption(..),printTable,show3)
+            Reference,ForeignKey,Tab,fields0,fields,fields2,fields3,createInfoRegister,
+            createInfoRegister2,RefOption(..),printTable,show3,Query,TabsUserInfo,emptyHM,runState,unWrapperQuery)
 import DynGhc (compile)
-import Data.HashMap.Strict (fromList,HashMap,(!),update,lookup,alter,union,adjust)
+import Data.HashMap.Strict (fromList,HashMap,(!),update,lookup,alter,union,adjust,empty)
 import Error (errorCreateTableKeyOrFK,tableExists,errorDropTable,succesDropTable,
               errorCreateReference,succesCreateTable,succesCreateReference,
               errorCheckReference,put,imposibleDelete,errorCreateTableNulls, tableDoesntExist,syspath,
               baseExist,baseNotExist,tablepath,errorDropAllTable,succesDropAllTables)
 import Url
-import Avl ((|||),toTree,deleteT,c2,c3,write,c,isMember,AVL,value,filterT,search,push)
+import Avl ((|||),toTree,deleteT,comp,comp2,comp3,write,isMember,AVL,value,filterT,search,push)
 import DynGhc (appendLine,reWrite)
 import Data.List (elem)
 import DynGhc (obtainTable,loadInfoTable)
@@ -56,21 +57,23 @@ deleteDirectory p = removeDirectoryRecursive p `catch` handleExists
 createDataBase :: BaseName -> Env -> IO ()
 createDataBase b e = case name e of
                         "" -> put "Primero logueate"
-                        n -> do res <- obtainTable syspath "Users" :: IO(Maybe (AVL (HashMap String UserInfo)))
+                        n -> do let c = (e,emptyHM,emptyHM)
+                                let query =  obtainTable syspath "Users" :: Query TabsUserInfo
+                                res <- (runState query) c
                                 case res of
-                                     Nothing -> put "Error fatal"
-                                     Just t -> let r = fromList [("userName",UN n)]
-                                               in  case search ["userName"] r t of
-                                                      Nothing -> put "Error fatal"
-                                                      Just reg -> let (UB bases) = reg ! "dataBases"
-                                                                     -- Si ya existe la base devolver un error
-                                                                  in if elem b bases then baseExist b
-                                                                     -- Sino agregar
-                                                                     else let reg' = adjust (\_ -> UB $ b:bases) "dataBases" reg
-                                                                              -- Reemplazar info vieja con info nueva
-                                                                              t' = push (fun reg') reg' t
-                                                                          in do reWrite t' (syspath ++ "/Users")
-                                                                                createDirectory $ url e
+                                   Left msgError -> put msgError
+                                   Right (_,t) -> let r = fromList [("userName",UN n)]
+                                                  in  case search ["userName"] r t of
+                                                       Nothing -> put "Error fatal"
+                                                       Just reg -> let (UB bases) = reg ! "dataBases"
+                                                                   -- Si ya existe la base devolver un error
+                                                                   in if elem b bases then baseExist b
+                                                                   -- Sino agregar
+                                                                      else let reg' = adjust (\_ -> UB $ b:bases) "dataBases" reg
+                                                                    -- Reemplazar info vieja con info nueva
+                                                                               t' = push (fun reg') reg' t
+                                                                           in do reWrite t' (syspath ++ "/Users")
+                                                                                 createDirectory $ url e
 
 
 
@@ -80,64 +83,67 @@ createDataBase b e = case name e of
 dropDataBase :: BaseName -> Env -> IO ()
 dropDataBase b e = case name e of
                       "" -> put "No estás logueado"
-                      n -> do res <- obtainTable syspath "Users"
+                      n -> do res <- unWrapperQuery e $ obtainTable syspath "Users"
                               case res of
-                               Nothing -> put "Error fatal1"
-                               Just t -> let r = fromList [("userName",UN n)]
-                                         in  case search ["userName"] r t of
-                                              Nothing -> put "Error fatal2"
-                                              Just reg -> let (UB bases) = reg ! "dataBases"
-                                                           -- Si ya existe la base devolver un error
-                                                          in if not $ elem b bases then baseNotExist b
-                                                             else let reg' = adjust (\_ -> UB $ [x | x <- bases, x /= b]) "dataBases" reg
+                               Left msgError -> put msgError
+                               Right t -> let r = fromList [("userName",UN n)]
+                                          in  case search ["userName"] r t of
+                                                   Nothing -> put "Error fatal2"
+                                                   Just reg ->
+                                                      let (UB bases) = reg ! "dataBases"
+                                                               -- Si ya existe la base devolver un error
+                                                      in if not $ elem b bases then baseNotExist b
+                                                         else let reg' = adjust (\_ -> UB $ [x | x <- bases, x /= b]) "dataBases" reg
                                                                     -- Reemplazar info vieja con info nueva
-                                                                      t' = push (fun reg') reg' t
-                                                                  in do reWrite t' (syspath ++ "/Users")
-                                                                        res2 <- obtainTable syspath "Tables"
-                                                                        case res2 of
-                                                                         Nothing -> put "Error fatal3"
-                                                                         Just t2 -> do let t2' = filterT fun2 t2
-                                                                                       reWrite t2' (syspath ++ "/Tables")
-                                                                                       deleteDirectory $ url $ e {dataBase = b}
+                                                                  t' = push (fun reg') reg' t
+                                                              in do reWrite t' (syspath ++ "/Users")
+                                                                    res2 <- unWrapperQuery e $ obtainTable syspath "Tables"
+                                                                    case res2 of
+                                                                     Left msgError -> put msgError
+                                                                     Right t2 -> do let t2' = filterT fun2 t2
+                                                                                    reWrite t2' (syspath ++ "/Tables")
+                                                                                    deleteDirectory $ url $ e {dataBase = b}
 
  where fun2 x = let (TB b') = x ! "dataBase"
                 in b /= b'
 
 
-fun reg x = fstByCC (\z1 z2 -> c2 ["userName"] z1 z2 ) reg x
+fun reg x = fstByCC (\z1 z2 -> comp2 ["userName"] z1 z2 ) reg x
 
 
 
 createTable :: Env -> String -> [CArgs]  -> IO ()
 createTable e n c =
- do res <- obtainTable syspath "Tables" :: IO (Maybe (AVL (HashMap String TableInfo)))
+ do res <- unWrapperQuery e $ obtainTable syspath "Tables"
     case res of
-      Nothing -> putStrLn "Error Fatal al crear tabla"
-      Just t -> do let reg = createInfoRegister2 e n
+      Left msgError -> putStrLn msgError
+      Right t -> do let reg = createInfoRegister2 e n
                     -- Existe alguna tabla?
-                   if isMember fields reg t then tableExists n
-                   else do let (q@(scheme,types,nulls,k,fk),r) = collect c ||| url' e n
-                           let (setNulls,setScheme) = toSet nulls ||| toSet scheme
-                           let (setKey,setFKFields) = toSet k ||| toSet [x | (_,xs,_,_) <- fk,(x,_) <- xs]
-                           let setFKNulls = toSet [x | (_,xs,s1,s2) <- fk,(x,_) <- xs,s1 == Nullifies || s2 == Nullifies ]
+                    if isMember fields reg t then tableExists n
+                    else do let (q@(scheme,types,nulls,k,fk),r) = collect c ||| url' e n
+                            let (setNulls,setScheme) = toSet nulls ||| toSet scheme
+                            let (setKey,setFKFields) = toSet k ||| toSet [x | (_,xs,_,_) <- fk,(x,_) <- xs]
+                            let setFKNulls = toSet [x | (_,xs,s1,s2) <- fk,(x,_) <- xs,s1 == Nullifies || s2 == Nullifies ]
                            -- La clave no puede ser nula
                            -- La clave y la clave foránea son parte del esquema?
-                           if  setKey `isSubset` setNulls || (not $ setFKNulls `isSubset` setNulls) then errorCreateTableNulls
-                           else -- Tiene que haber una clave
+                            if  setKey `isSubset` setNulls || (not $ setFKNulls `isSubset` setNulls) then errorCreateTableNulls
+                            else -- Tiene que haber una clave
                                 -- La clave tiene que ser parte del esquema
                                 -- Las claves foraneas tienen que ser parte del esquema
                                if k == [] || (not $ setKey `isSubset` setScheme) ||  (not $ setFKFields `isSubset`  setScheme) then errorCreateTableKeyOrFK
                                else --- Las referencias deben ser correctas
-                                      do b <- checkReference e fk (fromList $ zip scheme types)
-                                         if not b  then errorCheckReference
-                                         else do d1 <- createReference n e fk
-                                                 let hs = r ++ ".hs"
-                                                 d2 <- d1 `deepseq` writeFile hs $ code n q
-                                                 d2 `deepseq` compile hs
-                                                 removeFile $ r ++ ".hi"
-                                                 let t' = tree reg [TS scheme,TT types,TK k,TFK (splitFK fk), TR [],HN nulls]
-                                                 d3 <- appendLine tablepath t'
-                                                 d3 `deepseq` succesCreateTable n
+                                      do res <- unWrapperQuery e $ checkReference e fk (fromList $ zip scheme types)
+                                         case res of
+                                           Left errorMsg -> put errorMsg
+                                           Right b -> if not b  then errorCheckReference
+                                                      else do d1 <- createReference n e fk
+                                                              let hs = r ++ ".hs"
+                                                              d2 <- d1 `deepseq` writeFile hs $ code n q
+                                                              d2 `deepseq` compile hs
+                                                              removeFile $ r ++ ".hi"
+                                                              let t' = tree reg [TS scheme,TT types,TK k,TFK (splitFK fk), TR [],HN nulls]
+                                                              d3 <- appendLine tablepath t'
+                                                              d3 `deepseq` succesCreateTable n
 
 
 
@@ -157,18 +163,18 @@ createTable e n c =
 createReference :: String -> Env -> ForeignKey -> IO ()
 createReference _ _ [] = return ()
 createReference n e ((x,xs,o1,o2):ys) =
-  do res <- obtainTable syspath "Tables"
+  do res <- unWrapperQuery e $ obtainTable syspath "Tables"
      case res of
-      Nothing -> error "Error Fatal"
-      Just t ->  do let reg = createInfoRegister2 e  x
-                    -- Reemplaza en el árbol t el registro correspondiente
-                    let t' = write  (fun (n,o1,o2) fields reg) t
-                    reWrite t' tablepath
-                    succesCreateReference n x
-                    createReference n e ys
+      Left msgError -> put msgError
+      Right t ->  do let reg = createInfoRegister2 e  x
+                     -- Reemplaza en el árbol t el registro correspondiente
+                     let t' = write  (fun (n,o1,o2) fields reg) t
+                     reWrite t' tablepath
+                     succesCreateReference n x
+                     createReference n e ys
 
   where -- Función para actualizar el registro correspondiente en la tabla referenciada
-        fun m k r1 r2  = case c k r1 r2 of
+        fun m k r1 r2  = case comp k r1 r2 of
                             Eq y -> let f (TR l) = Just $ TR $ m:l
                                         in Eq $ update f "refBy" y
                             y -> y
@@ -177,37 +183,37 @@ createReference n e ((x,xs,o1,o2):ys) =
 
 
 dropAllTable :: Env -> IO()
-dropAllTable e = do res <- obtainTable "DataBase/system/" "Tables"
+dropAllTable e = do res <- unWrapperQuery e $ obtainTable "DataBase/system/" "Tables"
                     case res of
-                     Nothing -> putStrLn "Error fatal"
-                     Just t -> do  let reg = createInfoRegister e
-                                   let t' = filterT (c3 fields0 reg) t :: AVL (HashMap String TableInfo)
-                                   let path  = url e
-                                   deleteDirectory path
-                                   createDirectory path
-                                   reWrite t' tablepath
-                                   succesDropAllTables (dataBase e)
+                     Left msgError -> put msgError
+                     Right t -> do  let reg = createInfoRegister e
+                                    let t' = filterT (comp3 fields0 reg) t
+                                    let path  = url e
+                                    deleteDirectory path
+                                    createDirectory path
+                                    reWrite t' tablepath
+                                    succesDropAllTables (dataBase e)
 
 
 
 
 dropTable :: Env -> String -> IO ()
-dropTable e n = do res <- obtainTable "DataBase/system/" "Tables"
+dropTable e n = do res <- unWrapperQuery e $ obtainTable "DataBase/system/" "Tables"
                    case res of
-                     Nothing -> putStrLn "Error fatal"
-                     Just t -> do inf <- loadInfoTable ["refBy","fkey"] e n
-                                  case inf of
-                                    [] -> tableDoesntExist
-                                    [TR refBy, TFK fkey] -> -- Si existen tablas que hagan referencia a n no se puede eliminar
-                                                            if refBy /= [] then imposibleDelete n [x | (x,_,_) <- refBy]
-                                                            else dropTable' [x | (x,_) <- fkey] e n t
+                     Left msgError -> put msgError
+                     Right t -> do inf <- unWrapperQuery e $ loadInfoTable ["refBy","fkey"] e n
+                                   case inf of
+                                    Left msgError -> put msgError
+                                    Right [TR refBy, TFK fkey] -> -- Si existen tablas que hagan referencia a n no se puede eliminar
+                                                                 if refBy /= [] then imposibleDelete n [x | (x,_,_) <- refBy]
+                                                                 else dropTable' [x | (x,_) <- fkey] e n t
 
  where
   -- segundo nivel de dropTable
   dropTable' l e n t  =
               do t' <- removeReferences e t n l
                  let reg = createInfoRegister2 e n
-                 case deleteT  (c2 fields reg) t' of
+                 case deleteT  (comp2 fields reg) t' of
                    Nothing -> putStrLn $ errorDropTable n
                    Just t'' -> do reWrite t'' tablepath
                                   let r = url' e n
@@ -224,7 +230,7 @@ removeReferences e t n (x:xs) = let reg = fromList $ zip fields [TO (name e), TB
                                 in removeReferences e t' n xs
 
           -- Se elimina la tabla n de la lista de referencias de la tabla x
-    where find x r1 r2 = case c fields r1 r2 of
+    where find x r1 r2 = case comp fields r1 r2 of
                         Eq _ -> Eq (change x r2)
                         other -> other
           -- modificar lista en hashmap de r2
@@ -247,15 +253,15 @@ collect ((FKey xs s ys o1 o2):rs) = let (l1,l2,l3,k,fk) = collect rs
 
 -- Mostrar todas las tablas correspondientes a la actual base de datos
 showTable :: Env -> IO()
-showTable e = do res <- obtainTable syspath "Tables"  :: IO (Maybe (AVL (HashMap String TableInfo)))
+showTable e = do res <- unWrapperQuery e $  obtainTable syspath "Tables"
                  case res of
-                  Nothing -> putStrLn "Error fatal"
-                  Just t -> do let fields4 = ["owner","dataBase"]
-                               let reg = fromList $ zip  fields4 [TO (name e), TB (dataBase e)]
-                               let t' = filterT (predic fields4  reg) t
-                               printTable show3 ["tableName"] t'
+                  Left msgError -> put msgError
+                  Right t -> do let fields4 = ["owner","dataBase"]
+                                let reg = fromList $ zip  fields4 [TO (name e), TB (dataBase e)]
+                                let t' = filterT (predic fields4  reg) t
+                                printTable show3 ["tableName"] t'
 
 
-   where predic fields r1 r2   = case c fields r1 r2 of
+   where predic fields r1 r2   = case comp fields r1 r2 of
                                 Eq _ -> True
                                 _ -> False
