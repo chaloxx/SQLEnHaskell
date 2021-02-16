@@ -87,13 +87,13 @@ errorSelUser = "Primero debe seleccionar un usuario..."
 
 errorSelBase = "Primero debe seleccionar una base de datos..."
 
-welcome u s = putStrLn $  "Bienvenido " ++ u ++ "!"
+welcome u =  "Bienvenido " ++ u ++ "!"
 
 
-logError u s = put $ "No existe el usuario " ++ u  ++ " o la contraseña es incorrecta "
+logError u = "No existe el usuario " ++ u  ++ " o la contraseña es incorrecta "
 
 baseExist b = put $ "Ya existe la base " ++ b
-baseNotExist b = put $ "No existe la base " ++ b
+baseNotExist b = "No existe la base " ++ b
 
 notLog = put "No estás logueado"
 
@@ -130,6 +130,8 @@ errorCheckNull r = fail $  "No se permite que el valor de " ++ r ++ "sea nulo"
 errorCheckForeignKey = fail $ "Error en el chequeo de clave foránea"
 
 errorDropAllTable = "Error al eliminar todas las tablas"
+
+notSelecDataBase = retFail "Primero debe seleccionar una base de datos"
 
 imposibleDelete n l = put $ "Imposible borrar, " ++ n ++ " es referenciada por " ++ (tail (fold' l))
 
@@ -182,8 +184,9 @@ fold' = foldl (\ x y -> x ++ "," ++ y) ""
 
 msg = "Error buscando el objeto"
 
--- Realiza una busqueda en g a partir de una lista de nombres de tablas y de un nombre de columna
-lookupList ::Show b => HashMap String (HashMap String b) -> [String] -> String -> Either ErrorMsg b
+-- Realiza una busqueda exahustiva para encontrar el valor de un atributo a partir de una lista de tablas y
+-- el nombre del atributo
+lookupList ::Show b => HashMap String (HashMap String b) -> TableNames -> FieldName -> Either ErrorMsg b
 lookupList _ [] v = errorFind v
 lookupList g q@(y:ys) v = case lookup y g of
                            Nothing -> error $ show g

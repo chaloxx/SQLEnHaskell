@@ -73,7 +73,7 @@ createDataBase b e = case name e of
                                                                     -- Reemplazar info vieja con info nueva
                                                                                t' = push (fun reg') reg' t
                                                                            in do reWrite t' (syspath ++ "/Users")
-                                                                                 createDirectory $ url e
+                                                                                 createDirectory $ url $  e {dataBase=b}
 
 
 
@@ -91,8 +91,8 @@ dropDataBase b e = case name e of
                                                    Nothing -> put "Error fatal2"
                                                    Just reg ->
                                                       let (UB bases) = reg ! "dataBases"
-                                                               -- Si ya existe la base devolver un error
-                                                      in if not $ elem b bases then baseNotExist b
+                                                               -- Si no existe la base devolver un error
+                                                      in if not $ elem b bases then put $ baseNotExist b
                                                          else let reg' = adjust (\_ -> UB $ [x | x <- bases, x /= b]) "dataBases" reg
                                                                     -- Reemplazar info vieja con info nueva
                                                                   t' = push (fun reg') reg' t

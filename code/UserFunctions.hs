@@ -1,10 +1,10 @@
 module UserFunctions where
 import qualified Data.HashMap.Strict as H
-import AST (Env(..),UserInfo(..),unWrapperQuery,TabsUserInfo,Query)
+import AST (Env(..),UserInfo(..),unWrapperQuery,TabsUserInfo,Query,fromIO,askEnv,updateEnv)
 import Avl (toTree,isMember,filterT,comp,AVL)
 import System.Directory (createDirectory,removeDirectoryRecursive,doesDirectoryExist)
 import DynGhc (appendLine,obtainTable,reWrite)
-import Error (userpath,syspath,logError,welcome,nameAlreadyExist,invalidData,put)
+import Error (userpath,syspath,logError,welcome,nameAlreadyExist,invalidData,put,retFail)
 import COrdering
 -- Este modulo provee funciones para la administración de usuarios (crear, borrar, seleccionar)
 
@@ -27,14 +27,16 @@ createUser u p   = case u == "" || p == "" of
 
 
 
-selectUser :: String -> String -> String -> IO ()
-selectUser s u p = if u == "" || p == "" then logError u s
-                   else do res <- unWrapperQuery env $ obtainTable syspath "Users" ::IO(Either String (AVL (H.HashMap String UserInfo)))
-                           case res of
-                            Left msgError -> put msgError
-                            Right t -> do let m = H.fromList $ zip userFields [UN u,UP p]
-                                          if isMember userFields m t then welcome u s
-                                          else  logError u s
+selectUser :: String -> String -> Query ()
+selectUser u p = if u == "" || p == "" then retFail $ logError u
+                 else do t <- obtainTable syspath "Users" :: Query (AVL (H.HashMap String UserInfo)) -- ::IO(Either String (AVL (H.HashMap String UserInfo)))
+                         let m = H.fromList $ zip userFields [UN u,UP p]
+                         if isMember userFields m t then do fromIO $ put $ welcome u 
+                                                            env <- askEnv
+                                                            let env' = env {name=u}
+                                                            updateEnv env'
+
+                           else  retFail $ logError u
 
 
 deleteUser :: String -> String ->  IO ()

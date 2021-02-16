@@ -6,7 +6,7 @@ import DmlFunctions
 import Url
 import Control.Exception
 import Data.List (isSuffixOf,dropWhileEnd,nub,sort)
-import Error (errorSource,errorOpen,errorSelUser,errorSelBase,put,retFail,retMsg)
+import Error (errorSource,errorOpen,errorSelUser,errorSelBase,put,retFail,retMsg,baseNotExist,notSelecDataBase)
 import UserFunctions
 import DynGhc (appendLine)
 import qualified Data.HashMap.Strict as H
@@ -60,8 +60,7 @@ runSql (Source p) =  Q(\c ->   let e = fst' c in
 runManUser :: ManUsers ->  Query ()
 runManUser (CUser u p) = fromIO $ createUser u p
 
-runManUser (SUser u p) = do  env <- askEnv
-                             fromIO $ selectUser (source env) u p
+runManUser (SUser u p) = selectUser u p
 
 runManUser (DUser u p) = fromIO $ deleteUser u p
 
@@ -86,15 +85,17 @@ runDdl1 e cmd = case cmd of
   (Use b) -> do let e' = e {dataBase=b}
                 v <- fromIO $ doesDirectoryExist $ url e
                 if v then do fromIO $ putStrLn $ "Usando la base " ++ b
+                             updateEnv e'
                              return e'
-                else retFail $ "La base " ++ b ++ " no existe"
+                else retFail $ baseNotExist b
 
 
   (ShowB) -> retMsg $ "DataBase/" ++ (name e)
 
 
-  (ShowT) -> do fromIO $ showTable e
-                return e
+  (ShowT) ->  if dataBase e == "" then notSelecDataBase
+              else do fromIO $ showTable e
+                      return e
 
   where quitComa "" = ""
         quitComa (x:xs) = xs

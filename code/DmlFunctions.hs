@@ -494,12 +494,13 @@ runQuery' ((_,Prod args):xs) =
 
 -- Ejecuta selección
 runQuery' ((_,Sigma exp):xs) =
-     do  (b,names,fields,[t]) <- runQuery' xs
+     do  (b,names,fields,[t]) <- runQuery' xs         
          tabTypes <- askTypes
          fromEither $  checkTypeBoolExp exp names tabTypes
-         t' <- ioEitherFilterT (\reg-> do tabTypes <- askTypes
+         t' <- ioEitherFilterT (\reg-> do -- Recuperar todos los atributos
                                           onlyFields <- giveMeOnlyFields
-                                          newVals <- fromEither $ divideRegister names onlyFields reg
+                                          let res  = divideRegister names onlyFields reg
+                                          newVals <- fromEither res
                                           updateVals newVals
                                           -- Evaluar expresión booleana
                                           evalBoolExp names  exp) t
@@ -907,7 +908,8 @@ evalBoolExp s (GEqual  exp1 exp2) = evalBoolExp' (>=)  exp1 exp2 s
 
 
 -- Determina si la consulta dml es vacía en el contexto g
-evalBoolExp s (Exist dml) = do (_,_,_,ls)<- runQuery' (conversion  dml)
+evalBoolExp _ (Exist dml) = do let c = conversion  dml
+                               (_,_,_,ls)<- runQuery' c
                                if length ls /= 1 then errorExist
                                  else  let [t] = ls in
                                        return $ not $ isEmpty t

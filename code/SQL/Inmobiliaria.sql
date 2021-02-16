@@ -125,7 +125,6 @@ INSERT  Poblacion ("San Lorenzo", 400000);
 
 
 
-
 INSERT  Zona ("Rosario", "Norte");
 INSERT  Zona ("Rosario", "Sur");
 INSERT  Zona ("Rosario", "Centro");

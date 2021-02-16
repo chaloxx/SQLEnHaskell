@@ -17,7 +17,7 @@ main' e = do maybeLine <- readline (txt e)
               Nothing  -> main' e
               Just "q" -> return ()
               Just line -> do addHistory line
-                              e' <- parseCmd e line
+                              e' <-  parseCmd e line
                               main' e'
 
     where txt e = if checkSelectUser e then (name e) ++ "@> "

@@ -5,7 +5,7 @@
 module Check where
 
 import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,TabTypes,ForeignKey,Env,RefOption(..),(////),Types
-            ,show2,TableInfo(..),Key,Query(..),TableName,ErrorMsg)
+            ,show2,TableInfo(..),Key,Query(..),TableName,ErrorMsg,TableNames)
 import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,lookupList,errorForeignKey,errorCheckTyped,errorCheckLength,retOk,
               ok,errorCheckNull,errorCheckForeignKey)
 import Data.HashMap.Strict hiding (map)
@@ -110,7 +110,7 @@ checkTypedExpList names types (All:xs) = checkTypedExpList names types xs
 checkTypedExpList names types (arg:xs) = checkTypeExp names types arg >> checkTypedExpList names types xs
 
 -- Chequea el tipo de un argumento (primer nivel)
-checkTypeExp :: [String] -> TabTypes -> Args -> Either String Type
+checkTypeExp :: TableNames -> TabTypes -> Args -> Either String Type
 checkTypeExp s g e@(Plus exp1 exp2) = checkTypeExp' s False g exp1 exp2 e
 checkTypeExp s g e@(Minus exp1 exp2) = checkTypeExp' s False g exp1 exp2 e
 checkTypeExp s g e@(Times exp1 exp2) = checkTypeExp' s False g exp1 exp2 e

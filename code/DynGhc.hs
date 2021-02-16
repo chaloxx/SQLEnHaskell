@@ -112,7 +112,7 @@ load c r m f  = do res <- load' r m  f
 
 load' :: FilePath -> String -> Symbol ->  IO (Maybe a)
 load'  r m f =  do  let path = r ++ m ++ ".o"
-                    compile $ r ++ m ++ ".hs"
+                    --compile $ r ++ m ++ ".hs"
                     initObjLinker(DontRetainCAFs)
                     loadObj path
                     resolveObjs
