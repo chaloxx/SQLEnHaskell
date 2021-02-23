@@ -173,24 +173,22 @@ Query2  : FROM ArgF Query3    {From $2 $3}
        | Query3 {$1}
 
 
-Query3 : SomeJoin JOIN FieldList ON Var '=' Var  Query4 {Join $1 (map (\x -> Field x) $3) (Equal $5 $7) $8}
-       | Query4 {$1}
 
-Query4 : WHERE BoolExpW Query5 {Where $2 $3}
-      | Query5 {$1}
+Query3 : WHERE BoolExpW Query4 {Where $2 $3}
+      | Query4 {$1}
 
-Query5 : GROUPBY ArgF Query6  {GroupBy $2 $3}
+Query4 : GROUPBY ArgF Query5  {GroupBy $2 $3}
       | Query6 {$1}
 
-Query6 : HAVING BoolExpH Query7 {Having $2 $3}
+Query5 : HAVING BoolExpH Query6 {Having $2 $3}
+      | Query6 {$1}
+
+
+Query6 : ORDERBY ArgF Order Query7   {OrderBy $2 $3 $4}
+      | ORDERBY ArgF Query7          {OrderBy $2 A $3}
       | Query7 {$1}
 
-
-Query7 : ORDERBY ArgF Order Query8   {OrderBy $2 $3 $4}
-      | ORDERBY ArgF Query8          {OrderBy $2 A $3}
-      | Query8 {$1}
-
-Query8 : LIMIT NUM  {Limit $2 End}
+Query7 : LIMIT NUM  {Limit $2 End}
        | {End}
 
 
@@ -217,12 +215,15 @@ IntExp :: {Args}
        | '-' Exp %prec NEG {Negate $2}
        | NUM         {A3 $1}
 
-
 ArgF :: {[Args]}
-     : FIELD {[Field $1]}
-     | FIELD AS FIELD   {[As (Field $1) (Field $3)]}
-     | ArgF ',' ArgF    {$1 ++ $3}
-     | '('Query')' AS FIELD {[As (Subquery $2) (Field $5)]}
+    : ArgF AS FIELD {let [arg] = $1 in [As arg (Field $3)]}
+    |'('ArgF')' {$2}
+    | ArgF ',' ArgF    {$1 ++ $3}
+    | FIELD {[Field $1]}
+    | Query {[Subquery $1]}
+    | ArgF JOIN ArgF ON Var '=' Var {let ([arg1],[arg2]) =($1,$3) in [Join Inner arg1 arg2 (Equal $5 $7)]}
+    | ArgF  SomeJoin  JOIN ArgF ON Var '=' Var {let ([arg1],[arg2]) =($1,$4) in [Join $2 arg1 arg2 (Equal $6 $8)]}
+
 
 
 Fields :: {[Args]}

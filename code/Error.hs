@@ -71,6 +71,8 @@ errorEvalBool s = fail $ "Atributo " ++ s " inválido"
 
 errorFind s = fail $ "No se pudo encontrar el atributo " ++ s
 
+errorFind2 s = fail $ "La tabla " ++ s  ++ " es desconocida "
+
 errorExist  = retFail "La consulta es vacía"
 
 typeError e = fail $ "Error de tipo en la expresion " ++ e ++ "\n"
@@ -186,10 +188,10 @@ msg = "Error buscando el objeto"
 
 -- Realiza una busqueda exahustiva para encontrar el valor de un atributo a partir de una lista de tablas y
 -- el nombre del atributo
-lookupList ::Show b => HashMap String (HashMap String b) -> TableNames -> FieldName -> Either ErrorMsg b
+lookupList ::Show b => ContextFun b -> TableNames -> FieldName -> Either ErrorMsg b
 lookupList _ [] v = errorFind v
 lookupList g q@(y:ys) v = case lookup y g of
-                           Nothing -> error $ show g
+                           Nothing -> errorFind2 y
                            Just r -> case lookup v r of
                                       Nothing -> lookupList g ys v
                                       Just x' -> return x'

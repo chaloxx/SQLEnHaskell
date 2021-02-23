@@ -17,7 +17,7 @@ import Data.HashMap.Strict hiding (foldr,map,size,null)
 import Control.DeepSeq
 import Error
 import Data.Either
-import Data.List (intersect,(\\),partition,isPrefixOf)
+import Data.List (intersect,(\\),partition,isPrefixOf,intercalate)
 import qualified Data.Set as S (fromList,isSubsetOf,intersection,empty,difference)
 import Data.Hashable
 import COrdering (COrdering (..))
@@ -255,7 +255,7 @@ obtainTableList (x:xs) = do e <- askEnv
 
 
 -- Función para obtener valor de variables de tupla
-obtainValue :: [String] -> Args -> TabReg -> Args
+obtainValue :: [String] -> Args -> ContextFun Args -> Args
 obtainValue s (Field v) r = case lookupList r s v of
                               Right x -> x
                               _ -> error "ObtainValue error"
@@ -285,7 +285,6 @@ conversion (Intersect d1 d2) = let (a1,a2) = conversion d1 ||| conversion d2
                                in [(0,Inters a1 a2)]
 conversion (Select dist args dml) = insertCola (6,Pi dist args) $ conversion dml
 conversion (From args dml) = insertCola (1,Prod args) $ conversion dml
-conversion (Join j t exp dml) = insertCola (2,Joinner j t exp) $ conversion dml
 conversion (Where boolExp dml) = insertCola (3,Sigma boolExp) $ conversion dml
 conversion (GroupBy args dml) = insertCola (4,Group args) $ conversion dml
 conversion (Having boolExp dml) = insertCola (5,Hav boolExp) $ conversion dml
@@ -295,15 +294,13 @@ conversion (End) = []
 
 
 
--- Proyectar valores de las variables y agregarlas al contexto (sirve para subconsultas y para evitar ambiguedad con atributos del mismo nombre)
+-- Mapear valores de las variables
 proy :: TableNames -> [Args] -> Reg -> Query Reg
-proy names ls x = do onlyFields <- giveMeOnlyFields
-                     r <- fromEither $ divideRegister names onlyFields x
-                     -- Mapear cada proyección y juntar valores
-                     oldVals <- askVals
-                     updateVals  $ union r oldVals
-                     lr <- sequence $ map (proy' names) ls
-                     return $  foldl (\x y -> union x y) emptyHM lr
+proy names ls reg = do -- Actualizar valores en el
+                       fromRegisterToContext reg
+                       proys <- sequence $ map (proy' names) ls
+                       -- Unir proyecciones individuales para formar un registro
+                       return $  foldl (\x y -> union x y) emptyHM proys
 
 
 
@@ -329,7 +326,7 @@ proy' s (As (Subquery dml) (Field n)) = do let comms = conversion dml
                                            else errorPi4
 
 
---Renombre de selección
+--Renombrar selección
 proy' s (As exp (Field f)) =  do reg <- proy' s exp
                                  case elems reg of
                                         [value] -> return $ singleton f value
@@ -402,65 +399,34 @@ runQuery' g ((_,Inters a1 a2):xs) = runQuery'' g a1 a2 xs intersectionT
 runQuery' g ((_,Dif a1 a2):xs) = runQuery'' g a1 a2 xs differenceT
 -}
 
--- Hacer JOINS
-{-
-runQuery' g ((_, Joinner j tables exp):xs) =
-    do r <- runQuery' g xs
-       case r of
-          Right (g',groupBy,names,fields,[t1]) ->
-                     do v <- prod (fst' g) tables
-                        case v of
-                           Left msg -> retFail msg
-                           Right (g2,n2,f2,t2) -> do let (t2',f2') = case intersect fields f2 of
-                                                                      [] -> (t2,f2)
-                                                                      _ -> let name = head n2
-                                                                           in mapT (changeKey name f2) t2 ||| map (dot name) f2
-
-                                                         f3 = fields ++ f2'
-                                                         -- Producto cartesiano de registros
-                                                         t3 = prod'' f3 t1 t2'
-                                                         n3 = names ++ n2
-                                                         -- Actualizar tabla de tipos
-                                                         g31 = updateContext3 g' (trd' g2)
-                                                         -- Juntar campos de todas las tablas
-                                                         onlyFields = union (giveMeOnlyFields (snd' g31)) (giveMeOnlyFields (snd' g2))
-                                                         -- Para poder agregar al contexto, inicialmente le damos valores nulos
-                                                         onlyFieldsWithNull = mapHM createHMWithNull onlyFields
-                                                         -- Actualizar árbol de tablas y campos
-                                                         g32 = updateContext2 g31 onlyFieldsWithNull
-                                                     case checkTypeBoolExp exp n3 (trd' g32) of
-                                                        Left msg -> retFail msg
-                                                        Right _  -> case j of
-                                                                     Inner -> pattern (ioEitherFilterT (eval onlyFields n3 g32 exp) t3)
-                                                                                      (\t4 -> (g32,groupBy,n3,f3,[t4]))
-
-                                            --              JRight -> retOk $ (g',groupBym,table:names,mapT f t3)
-                                            --              JLeft -> retOk $ (g',groupBym,table:names,mapT f t3)
-
-    where eval onlyFields n3 g32 exp x = case divideRegister n3 onlyFields x of
-                                          Left msg -> retFail msg
-                                          Right r -> let g32' = updateContext2 g32 r -- Actualizar contexto con valores del registro
-                                                     in evalBoolExp n3 g32' exp
 
 
-
--}
 -- Realiza proyecciones
 runQuery'  ((_,Pi unique args):rs) =
  do (groupBy,names,fields,tables) <- runQuery' rs
     if not $ groupBy then case partition isAgg args of -- Separar funciones de agregado de selecciones comunes
-                                     (_,[]) -> applyWithAgg unique names args tables   -- Caso con funciones de agregado
-                                     ([],_) ->   -- Caso sin funciones de agregado
-                                                 -- Chequear tipo de  expresiones enteras si las hay
-                                                 do tabTypes <- askTypes
-                                                    Q(\c -> return $ fmap (\x -> (c,x)) $ checkTypedExpList names tabTypes args)
-                                                    t <- ioEitherMapT (proy names args) (isNull tables) -- Aplicar proyecciones
-                                                    let args'= toKey fields args    -- Obtener atributos solicitados
-                                                    distinct unique names args' t
+                            (_,[]) -> applyWithAgg unique names args tables   -- Caso con funciones de agregado
+                            ([],_) ->   do -- Caso sin funciones de agregado
+                                            tabTypes <- askTypes
+                                            Q(\c -> return $ fmap (\x -> (c,x)) $ checkTypedExpList names tabTypes args)
+                                            t <- ioEitherMapT (proy names args) (isNull tables) -- Aplicar proyecciones
+                                            let newFields= toFieldName fields args    -- Obtener strings para imprimir de atributos solicitados
+                                            let newTabName = foldl (++) "" names
+                                            updateFieldsInContext newTabName args
+                                            tabVals <- askVals
+                                            if All `elem` args then do collapseContext newTabName names fields
+                                                                       distinct unique [newTabName] newFields t
+                                            else  do -- Obtener que atributos deben mantenerse en el contexto
+                                                     let fieldInContext = toFieldName2 args
+                                                     collapseContext newTabName names fieldInContext
+                                                     distinct unique  [newTabName] newFields t -- Borrar atributos innecesarios
 
-                                     _ -> errorPi2   -- Error al mezclar las operaciones
 
-                                                 -- En este caso se uso la claúsula group by
+
+
+                            _ -> errorPi2   -- Error al mezclar las operaciones
+
+    -- En este caso se uso la claúsula group by
     else  if All `elem` args then errorPi3
           else applyWithAgg unique names args tables
 
@@ -471,9 +437,14 @@ runQuery'  ((_,Pi unique args):rs) =
                                                    distinct unique names fields tables
 
 
-        toKey _ [] = []
-        toKey fields (All:xs) = fields ++ (toKey fields xs)
-        toKey fields (arg:xs) = (show2 arg) : (toKey fields xs)
+        toFieldName _ [] = []
+        toFieldName fields (All:xs) = fields ++ (toFieldName fields xs)
+        toFieldName fields (arg:xs) = (show2 arg) : (toFieldName fields xs)
+
+        toFieldName2 [] = []
+        toFieldName2 (Field v : xs) = v : toFieldName2 xs
+        toFieldName2 ((Dot _ v): xs) = v : toFieldName2 xs
+        toFieldName2 ((As _ (Field v)):xs) =  v : toFieldName2 xs
 
         -- Eliminar registros duplicados si se solicita
         distinct unique names fields table = if unique then let table' = mergeT (comp fields) E table in
@@ -494,17 +465,22 @@ runQuery' ((_,Prod args):xs) =
 
 -- Ejecuta selección
 runQuery' ((_,Sigma exp):xs) =
-     do  (b,names,fields,[t]) <- runQuery' xs         
+     do  (b,localNames,fields,[t]) <- runQuery' xs
          tabTypes <- askTypes
-         fromEither $  checkTypeBoolExp exp names tabTypes
-         t' <- ioEitherFilterT (\reg-> do -- Recuperar todos los atributos
-                                          onlyFields <- giveMeOnlyFields
-                                          let res  = divideRegister names onlyFields reg
-                                          newVals <- fromEither res
-                                          updateVals newVals
+         tabNames <- giveMeTableNames
+         let tabNames' = localNames ++ [x | x<-tabNames, not $ x `elem` localNames]
+         onlyFields <- giveMeOnlyFields
+         fromEither $  checkTypeBoolExp exp tabNames' tabTypes
+         t' <- ioEitherFilterT (\reg-> do -- Actualizar contexto
+                                          tabVals <- askVals
+                                          fromRegisterToContext reg
+                                          tabVals <- askVals                                          
                                           -- Evaluar expresión booleana
-                                          evalBoolExp names  exp) t
-         return (b,names,fields,[t'])
+                                          evalBoolExp tabNames'  exp) t
+         return (b,localNames,fields,[t'])
+
+
+
 
 
 -- Agrupa por atributos
@@ -529,10 +505,8 @@ runQuery' ((_,Hav exp):xs) = do (b,names,fields,tables) <- runQuery' xs
                                -- Reemplazar valores en expresion
  where mapFun names e t = do exp <- replaceAgg names e t
                              onlyFields <- giveMeOnlyFields
-                             case divideRegister names onlyFields (value t) of
-                                Left msgError -> retFail msgError
-                                Right reg -> do updateVals reg
-                                                evalBoolExp names exp
+                             fromRegisterToContext $ value t
+                             evalBoolExp names exp
 
 
 
@@ -602,31 +576,37 @@ prod :: [Args] -> Query (TableNames,FieldNames,Tab)
 prod [] = retFail "Sin argumentos"
 
 
--- Caso una sola tabla
 prod [s] = do (n,f,t) <- prod' s
               return ([n],f,t)
 
 
--- Caso 2 tablas, se agrega nombre de tabla al nombre del campo para evitar ambiguedad
-prod ([s1,s2]) = do  (n1,fields1,t1) <- prod' s1
-                     (n2,fields2,t2) <- prod' s2
-                     let (t1',t2') = mapT (changeKey n1 fields1) t1 ||| mapT (changeKey n2 fields2) t2
-                     let (fields1',fields2') = map (dot n1) fields1 ||| map (dot n2) fields2
-                     let fullFields = fields1' ++ fields2'
-                     return $ ([n1,n2],fullFields,prod'' fullFields t1' t2')
+prod (s:xs) = do  (n,f,t1) <- prod' s
+                  (ns,fs,t2) <- prod xs
+                  let fs' = f++fs
+                  return (n:ns,fs',prod'' fs' t1 t2)
 
--- Caso 3 o más tablas
-prod (s:ls) = do  (n1,fields1,t1) <- prod ls
-                  (n2,fields2,t2) <- prod' s
-                  let t2' = mapT (changeKey n2 fields2) t2
-                  let allFields = (map (dot n2) fields2) ++ fields1
-                  retOk $ (n2:n1,allFields, prod'' allFields t1 t2')
 
-dot s x = s ++ "." ++ x
-
--- Cambiar llaves de los registros
-changeKey _ [] _ = emptyHM
-changeKey s (x:xs) r = union ((singleton (dot s x)) (r ! x)) (changeKey s xs r)
+-- --
+-- --
+-- -- -- Caso 2 tablas, se agrega nombre de tabla al nombre del campo para evitar ambiguedad
+-- -- prod ([s1,s2]) = do  (n1,fields1,t1) <- prod' s1
+-- --                      (n2,fields2,t2) <- prod' s2
+-- --                      let (t1',t2') = mapT (changeKey n1 fields1) t1 ||| mapT (changeKey n2 fields2) t2
+-- --                      let (fields1',fields2') = map (dot n1) fields1 ||| map (dot n2) fields2
+-- --                      let fullFields = fields1' ++ fields2'
+-- --                      return $ ([n1,n2],fullFields,prod'' fullFields t1' t2')
+--
+-- -- Caso 3 o más tablas
+-- prod (s:ls) = do  (n1,fields1,t1) <- prod ls
+--                   (n2,fields2,t2) <- prod' s
+--                   let t2' = mapT (changeKey n2 fields2) t2
+--                   retOk $ (n2:n1,allFields, prod'' allFields t1 t2')
+--
+-- --dot s x = s ++ "." ++ x
+--
+-- -- Cambiar llaves de los registros
+-- changeKey _ [] _ = emptyHM
+-- changeKey s (x:xs) r = union ((singleton (dot s x)) (r ! x)) (changeKey s xs r)
 
 
 
@@ -634,37 +614,57 @@ changeKey s (x:xs) r = union ((singleton (dot s x)) (r ! x)) (changeKey s xs r)
 -- Producto cartesiano (segundo nivel)
 -- Primer caso : Subconsulta con renombre
 prod' :: Args -> Query (TableName,FieldNames,Tab)
-prod' (As (Subquery s) (Field n)) = let c = conversion s
-                                    in do (b,names,fields,table)  <- runQuery' c
-                                          if b || length table /= 1 then errorProd2
-                                          else do tabTypes <- askTypes
-                                                  let ([n'],[t]) = (names,table)
-                                                  let newTypes = updateKey n' n tabTypes
-                                                  updateTypes newTypes
-                                                  return (n,fields,t)
+prod' (Subquery s) = let c = conversion s
 
- where mapTypes _ [] _ = emptyHM
-       mapTypes fields (x:xs) types = let t = filterWithKey (\y -> \ _ -> y `elem` fields || (x `dot` y) `elem` fields ) (types ! x) -- Solo nos importa el contexto para los campos seleccionados
-                                      in union t (mapTypes fields xs types)
+                     in do (b,names,fields,table)  <- runQuery' c
+                           if b || length names /= 1 then errorProd2
+                           else let ([n],[t]) = (names,table) in return (n,fields,t)
+
+ -- where mapTypes _ [] _ = emptyHM
+ --       mapTypes fields (x:xs) types = let t = filterWithKey (\y -> \ _ -> y `elem` fields || (x `dot` y) `elem` fields ) (types ! x) -- Solo nos importa el contexto para los campos seleccionados
+ --                                      in union t (mapTypes fields xs types)
 
 
+
+prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
+                                  (ns,fs,t) <- prod ts
+                                  if length ns /= 2 then retFail "Error en join"
+                                  else do tabTypes <- askTypes
+                                          tabNames <- giveMeTableNames
+                                          onlyFields <- giveMeOnlyFields
+                                          let tabNames' = ns ++ [x | x<-tabNames, not $ x `elem` ns]
+                                          fromEither $ checkTypeBoolExp exp tabNames' tabTypes
+                                          case j of
+                                            Inner -> do  t' <- ioEitherFilterT (\reg-> do
+                                                                                          fromRegisterToContext reg
+                                                                                          --tabVals <- askVals
+                                                                                          --fromIO $ put $ show tabVals
+                                                                                          -- Evaluar expresión booleana
+                                                                                          evalBoolExp tabNames'  exp) t
+                                                         let [n1,n2] = ns
+                                                         let nn = intercalate "Join" ns
+                                                         joinContext nn n1 n2
+                                                         return (nn,fs,t')
+
+
+
+                                        --              JRight -> retOk $ (g',groupBym,table:names,mapT f t3)
+                                        --              JLeft -> retOk $ (g',groupBym,table:names,mapT f t3)
 
 
 
 
 -- Segundo caso : Tabla con renombre
-prod' (As (Field n1) (Field n2)) = do (_,scheme,t) <- prod' (Field n1)
-                                      tabTypes <- askTypes
-                                      let newTypes = updateKey n1 n2 tabTypes
-                                      updateTypes newTypes
-                                      return (n2,scheme,t)
+prod' (As arg (Field n)) = do (n2,scheme,t) <- prod' arg
+                              updateKeyContext n2 n
+                              return (n,scheme,t)
 
 -- Tercer caso : Tabla comun
 prod' (Field n) = do e <- askEnv
                      let (path,user) = (url  e) ||| name e in
                       do [TS scheme, TT types] <- loadInfoTable ["scheme","types"] e n-- Obtener esquema y tipos
                          t <- obtainTable path n
-                         let types' = singleton n (fromList $ zip scheme types)
+                         let types' = singleton n $ fromList $ zip scheme types
                          let fields = singleton n $ fromList $ map (\x -> (x,Nulo)) scheme
                          -- Actualizar contexto
                          updateContext e fields types'
@@ -763,17 +763,16 @@ evalAgg''' d s t e f = if d then let t' = mergeT (comp [s]) E t
 -- Abstracción para escribir menos código
 --abstract :: Args -> FieldNames -> (Float -> Float -> Float -> Float) -> Query Args
 abstract arg  names f  = \ x y z -> do onlyFields <- giveMeOnlyFields
-                                       vals <- fromEither $ divideRegister names onlyFields x
+                                       fromRegisterToContext x
                                        v1 <- y
                                        v2 <- z
                                        let op = f v1 v2
                                        case arg of
-                                         (Field v) ->  abstract''  names v op vals
-                                         (Dot t v) -> abstract''  [t] v op vals
-  where abstract'' names v op res =  do  updateVals res
-                                         vals <- askVals
-                                         x <- fromEither $ lookupList vals names v
-                                         return $ op x
+                                         (Field v) ->  abstract''  names v op
+                                         (Dot t v) -> abstract''  [t] v op
+  where abstract'' names v op  =  do  vals <- askVals
+                                      x <- fromEither $ lookupList vals names v
+                                      return $ op x
 
 
 
@@ -801,40 +800,6 @@ group xs t = let a = value t
       where equal xs v x = case comp xs v x of
                             Eq _ -> True
                             _ -> False
-
-
-
-
--- Actualiza el valor de la llave k2 a k1 en m
-updateKey  ::  (Eq k, Hashable k) => k -> k -> HashMap k v -> HashMap k v
-updateKey oldKey newKey m = deleteHM oldKey $ insertHM newKey (m ! oldKey) m
-
-
--- Crear rutas de acceso hacias los datos
-divideRegister :: TableNames -> HashMap TableName FieldNames -> Reg -> Either ErrorMsg  TabReg
-divideRegister [] _ _ = return emptyHM
-divideRegister l@(m:ms) hm r = do  x <- divideRegister' m (hm ! m) r
-                                   xs <- divideRegister ms hm r
-                                   return $ union x xs
-
-
-
-divideRegister' :: TableName -> FieldNames -> Reg -> Either String TabReg
-divideRegister' x [] _  = return $ singleton x emptyHM
-divideRegister' x (l:ls) r = do y <- divideRegister'' x l r
-                                ys <- divideRegister' x ls r
-                                return $ singleton x (union y (ys ! x))
-
-divideRegister'' :: TableName -> FieldName -> Reg -> Either String Reg
-divideRegister'' x y r = case lookup y r of
-                          Nothing -> let str = x ++ "." ++ y
-                                     in case lookup str r of
-                                         Nothing -> error $ show r--fail $ "No se pudo encontrar el atributo " ++ str
-                                         Just v -> ok $ singleton  y v
-                          Just v -> ok $  singleton y v
-
-
-
 
 
 
@@ -887,8 +852,8 @@ evalIntExp' b o s exp1 exp2 = if b then do n2 <- evalIntExp s exp2
 
 -- Evaluar expresión booleana
 evalBoolExp :: TableNames -> BoolExp -> Query Bool
-evalBoolExp t (Not exp) = do b <- evalBoolExp t exp
-                             retOk $ not b
+evalBoolExp s (Not exp) = do b <- evalBoolExp s exp
+                             return $ not b
 
 evalBoolExp s (And exp1 exp2)  = applyEval s exp1 exp2 (&&)
 
@@ -923,18 +888,21 @@ evalBoolExp s (InVals (Field v) l) = do vals <- askVals
                                         retOk $ elem x l
 
 
--- Evalua si field está en la columna que es resultado de dml
-evalBoolExp s (InQuery (Field f1) dml) = do (b,_,fields,ls) <-runQuery' $ conversion dml
-                                            if length fields /= 1 || b || length ls /= 1 then error "Error" -- La busqueda debe ser sobre una columna
-                                            else let [f2] = fields
+-- Evalua si el valor de la variable field está en la columna que es resultado de dml
+evalBoolExp s (InQuery (Field f1) dml) = do (b,ts,fs,ls) <-runQuery' $ conversion dml
+                                            tabTypes <- askTypes
+                                            if length fs /= 1 || b || length ls /= 1 then error "Error" -- La busqueda debe ser sobre una columna
+                                            else let [f2] = fs
                                                      [t] = ls
                                                   in do tabTypes <- askTypes
                                                         t1 <- fromEither $ lookupList tabTypes s f1 -- Buscamos los tipos
-                                                        t2 <- fromEither $ lookupList tabTypes s f2
+                                                        t2 <- fromEither $ lookupList tabTypes (s++ts) f2
                                                         if t1 /= t2 then  error "Algo anda mal" -- Deben coincidir
                                                         else do vals <- askVals
                                                                 v <- fromEither $ lookupList vals s f1
                                                                 let r = fromList $ [(f2,v)]
+                                                                -- fromIO $ put $  show v
+                                                                -- fromIO $ put $  show t
                                                                 return $ isMember [f2] r t
 
 

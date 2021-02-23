@@ -4,7 +4,7 @@
 
 module Check where
 
-import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,TabTypes,ForeignKey,Env,RefOption(..),(////),Types
+import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,ContextFun,ForeignKey,Env,RefOption(..),(////),Types
             ,show2,TableInfo(..),Key,Query(..),TableName,ErrorMsg,TableNames)
 import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,lookupList,errorForeignKey,errorCheckTyped,errorCheckLength,retOk,
               ok,errorCheckNull,errorCheckForeignKey)
@@ -73,7 +73,7 @@ checkNullifies' nulls l xs  = if intersect nulls l == [] then checkNullifies nul
 
 
 -- Chequea que expresión sea segura comprobando los tipos de las subexpresiones
-checkTypeBoolExp :: BoolExp -> [String] -> TabTypes -> Either String Type
+checkTypeBoolExp :: BoolExp -> [String] -> ContextFun Type -> Either String Type
 checkTypeBoolExp e@(Not exp) s types = case checkTypeBoolExp exp s types of
                                         Right Bool -> return Bool
                                         _ -> typeError (show e)
@@ -104,13 +104,13 @@ checkTypeBoolExp' exp1 exp2 s types e =
         intOrFloat _ = False
 
 
-checkTypedExpList :: [TableName] -> TabTypes -> [Args] -> Either ErrorMsg ()
+checkTypedExpList :: [TableName] -> ContextFun Type -> [Args] -> Either ErrorMsg ()
 checkTypedExpList _ _ [] = return ()
 checkTypedExpList names types (All:xs) = checkTypedExpList names types xs
 checkTypedExpList names types (arg:xs) = checkTypeExp names types arg >> checkTypedExpList names types xs
 
 -- Chequea el tipo de un argumento (primer nivel)
-checkTypeExp :: TableNames -> TabTypes -> Args -> Either String Type
+checkTypeExp :: TableNames -> ContextFun Type -> Args -> Either String Type
 checkTypeExp s g e@(Plus exp1 exp2) = checkTypeExp' s False g exp1 exp2 e
 checkTypeExp s g e@(Minus exp1 exp2) = checkTypeExp' s False g exp1 exp2 e
 checkTypeExp s g e@(Times exp1 exp2) = checkTypeExp' s False g exp1 exp2 e
@@ -120,6 +120,7 @@ checkTypeExp s g (A2 _) = return Float
 checkTypeExp s g (A3 _) = return Int
 checkTypeExp s g (A4 _) = return Float
 checkTypeExp s g (Field v) = lookupList g s v
+
 checkTypeExp s g (Dot s1 s2) = lookupList g [s1] s2
 checkTypeExp s g (Negate exp) = checkTypeExp s g exp
 checkTypeExp s g (Brack exp) = checkTypeExp s g exp

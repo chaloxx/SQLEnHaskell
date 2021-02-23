@@ -1,6 +1,6 @@
 module AST where
 import Avl (AVL(..),mapT,pushL,join,value,left,right,emptyT)
-import qualified Data.HashMap.Strict as HM  (HashMap (..),insert,delete,empty,update,fromList,(!),mapWithKey,keys,map,union,singleton)
+import qualified Data.HashMap.Strict as HM  (HashMap (..),insert,delete,empty,update,fromList,(!),mapWithKey,keys,map,union,singleton,filterWithKey,member)
 import qualified Data.Set as S
 import Data.Hashable
 import Data.Typeable (TypeRep)
@@ -16,7 +16,6 @@ data Time = Time {tHour::Int,tMinute::Int,tSecond::Int} deriving (Ord,Eq,Show)
 data DateTime = DateTime {year::Int,month::Int,day::Int,hour::Int,minute::Int,second::Int} deriving (Ord,Eq,Show)
 
 newtype Query a = Q {runState::Context -> IO(Either ErrorMsg (Context,a))}
-
 
 
 
@@ -44,7 +43,7 @@ instance Monad Query where
 
 
 -- Actualizar contexto
-updateContext :: Env -> TabReg -> TabTypes -> Query ()
+updateContext :: Env -> ContextFun Args -> ContextFun Type-> Query ()
 updateContext e t tp = do updateEnv e
                           updateVals t
                           updateTypes tp
@@ -55,12 +54,89 @@ updateEnv e = Q(\c -> (return $ Right  ((e,snd' c,trd' c),())))
 
 
 -- Actualiza los valores de las variables de tupla en el contexto
-updateVals :: TabReg -> Query ()
+updateVals :: ContextFun Args -> Query ()
 updateVals x =  Q(\c -> return $ Right ((fst' c,HM.union x (snd' c),trd' c),()))
 
 -- Actualiza los tipos de las variables de tupla en el contexto
-updateTypes :: TabTypes -> Query ()
+updateTypes :: ContextFun Type -> Query ()
 updateTypes y =  Q(\c -> return $ Right ((fst' c,snd' c,HM.union y (trd' c)),()))
+
+updateKeyContext :: TableName -> TableName -> Query ()
+updateKeyContext oldKey newKey = Q(\c -> let newVals = updateKey oldKey newKey $ snd' c
+                                             newTypes = updateKey oldKey newKey $ trd' c
+                                         in return $ Right ((fst' c,newVals,newTypes),()))
+-- Renombrar en el contexto atributos con AS
+updateFieldsInContext :: TableName -> [Args] -> Query ()
+updateFieldsInContext _  [] = return ()
+
+updateFieldsInContext n  ((As (Field v1) (Field v2)) : xs) = do updateFieldsInContext n xs
+                                                                Q(\c -> let vals = updateKey v1 v2 $ snd' c HM.! n
+                                                                            types = updateKey v1 v2 $ trd' c HM.! n
+                                                                            tabVals =  HM.singleton n vals `HM.union` snd' c
+                                                                            tabTypes = HM.singleton n types `HM.union` trd' c
+                                                                        in return $ Right ((fst' c, tabVals,tabTypes),()))
+updateFieldsInContext n (_ : xs) = updateFieldsInContext n xs
+
+-- Actualiza el valor de la llave en m
+updateKey  ::  (Eq k, Hashable k) => k -> k -> HM.HashMap k v -> HM.HashMap k v
+updateKey oldKey newKey m = deleteHM oldKey $ insertHM newKey (m HM.! oldKey) m
+
+collapseContext :: TableName -> TableNames -> FieldNames -> Query ()
+collapseContext t ts fs = Q(\c -> let newVals = HM.singleton t $ recoverFromContext ts fs $ snd' c
+                                      newTypes = HM.singleton t $ recoverFromContext ts fs $ trd' c
+                                      tabVals' = deleteFromContext ts $ snd' c
+                                      tabTypes' = deleteFromContext ts $ trd' c
+                                      c' = (fst' c,newVals `HM.union` tabVals',newTypes `HM.union` tabTypes')
+                                  in return $ Right (c',()))
+
+recoverFromContext :: TableNames -> FieldNames -> ContextFun a ->  HM.HashMap String a
+recoverFromContext [] _ _  = HM.empty
+recoverFromContext (t:ts) fs c = (HM.filterWithKey (funFilter fs) $ c HM.! t) `HM.union` recoverFromContext ts fs c
+
+ where funFilter fs k _ = if k  `elem`  fs then True
+                          else False
+
+deleteFromContext :: TableNames -> ContextFun a -> ContextFun a
+deleteFromContext ts cf = HM.filterWithKey (funFilter ts) cf
+ where funFilter ts k _ = if k `elem` ts then False
+                          else True
+
+-- Pasar datos del registro al contexto
+-- fromRegisterToContext :: Reg -> Query ()
+-- fromRegisterToContext reg = Q(\c -> let tabVals = snd' c
+--                                         tabVals' = HM.mapWithKey (mapFun reg) tabVals
+--                                         c' = (fst' c,tabVals', trd' c)
+--                                     in return $ Right (c',()))
+--    where mapFun reg _ vals = HM.mapWithKey (mapFun' reg) vals
+--          mapFun' reg k v  = if k `HM.member` reg then reg HM.! k
+--                             else v
+
+
+fromRegisterToContext :: TableNames -> Reg -> Query ()
+fromRegisterToContext ts reg = Q(\c -> let tabVals = HM.filterWithKey  (filterFun ts) snd' c
+                                           tabVals' = HM.mapWithKey (mapFun reg) tabVals
+                                           c' = (fst' c,tabVals', trd' c)
+                                    in return $ Right (c',()))
+   where mapFun reg _ vals = HM.mapWithKey (mapFun' reg) vals
+         mapFun' reg k v  = if k `HM.member` reg then reg HM.! k
+                            else v
+         mapFun3 ts k _  = k `elem` ts
+
+
+
+
+
+--
+-- deleteFromContext :: TableNames  -> Query ()
+-- deleteFromContext ts fs = Q(\c ->  let newVals = deleteFromContext' ts fs $ snd' c
+--                                        newTypes = deleteFromContext' ts fs $ trd' c
+--                                    in return $ Right (c,newVals,newTypes))
+-- deleteFromContext' :: TableNames -> ContextFun a -> ContextFun a
+-- deleteFromContext' ts cf = HM.filterWithKey funFilter ts fs cf
+--  where funFilter fs k _ = if k `elem` fs then False
+--                           else True
+
+
 
 
 askContext :: Query Context
@@ -69,10 +145,10 @@ askContext = Q(\c -> return $ Right(c,c))
 askEnv :: Query Env
 askEnv = Q(\c -> return $ Right (c,fst' c))
 
-askVals :: Query TabReg
+askVals :: Query (ContextFun Args)
 askVals = Q(\c -> return $ Right (c,snd' c))
 
-askTypes :: Query TabTypes
+askTypes :: Query (ContextFun Type)
 askTypes = Q(\c -> return $ Right (c,trd' c))
 
 
@@ -91,31 +167,6 @@ unWrapperQuery e q = do  let c = (e,emptyHM,emptyHM)
                          res <- (runState q ) c
                          return $ fmap (\(_,x)-> x) res
 
-
-
-
-
--- Patrones de cómputo (ahorran código)
-(||||):: (Monad m, Monad n) => m (n a) -> m (n b) -> m (n (a,b))
-a |||| b = do (a', b') <- a //// b
-              return $ do (a'',b'') <- a' //// b'
-                          return (a'',b'')
-
-(////) :: Monad m => m a -> m b -> m (a,b)
-a //// b = do a' <- a
-              b' <- b
-              return (a',b')
-
-
-pattern :: (Monad m, Functor n) => m (n a) -> (a -> b) -> m (n b)
-pattern r f = do r' <- r
-                 return $ fmap f r'
-
-pattern2 :: IO (Either String a) -> (a -> IO (Either String b)) -> IO (Either String b)
-pattern2 res f = do res' <- res
-                    case res' of
-                      Right v -> f v
-                      Left msg -> return (Left msg)
 
 
 
@@ -155,18 +206,21 @@ particionT2 p f t =  let  (l1,l2) = particionT2 p f (left t)
 
 
 
+(////) :: Monad m => m a -> m b -> m (a,b)
+a //// b = do a' <- a
+              b' <- b
+              return (a',b')
 
 -- Definimos el entorno como el usuario actual, la BD que se está usando y la fuente usada
 data Env = Env {name :: String, dataBase :: String, source :: String} deriving Show
 -- Tipos de una tabla
 type Types = HM.HashMap FieldName Type
 -- Tipos de varias tablas
-type TabTypes = HM.HashMap TableName Types
+
 
 -- Representamos los registros de una tabla
 type Reg = HM.HashMap String Args
 -- Registros de varias tablas
-type TabReg = HM.HashMap String Reg
 
 
 
@@ -181,7 +235,8 @@ type ErrorMsg = String
 --  Env (Entorno) : Usuario, base de datos, fuente de datos
 -- TabReg : TableName -> FieldName -> Args
 -- TabTypes : TableName -> FieldName -> Type
-type Context = (Env,TabReg,TabTypes)
+type ContextFun a = HM.HashMap TableName (HM.HashMap FieldName a)
+type Context = (Env,ContextFun Args,ContextFun Type)
 
 -- Sinonimos
 type TableName = String
@@ -291,7 +346,6 @@ data AR =     Pi Distinct [Args]
             | Order [Args] O
             | Group [Args]
             | Top Int
-            | Joinner JOINS [Args] BoolExp
             deriving Show
 
 
@@ -300,7 +354,6 @@ data AR =     Pi Distinct [Args]
 -- Lenguaje DML (Describen la información solicitada sobre la BD)
 data DML =     Select Distinct [Args] DML
               | From [Args] DML
-              | Join JOINS [Args] BoolExp DML
               | Where BoolExp  DML
               | GroupBy [Args] DML
               | Having BoolExp  DML
@@ -340,6 +393,7 @@ data Args = A1 String
           | Div Args Args
           | Negate Args
           | Brack Args
+          | Join JOINS Args Args BoolExp
           deriving (Eq,Ord,Show)
 
 
@@ -560,6 +614,19 @@ retHeadOrNull [] = emptyT
 retHeadOrNull tables = head tables
 
 
--- Obtener los campos de cada tabla
+-- Obtener los campos en el contexto actual
 giveMeOnlyFields :: Query(HM.HashMap TableName FieldNames)
 giveMeOnlyFields = Q(\c -> return $ Right (c,HM.mapWithKey (\k -> \v -> HM.keys v) $ trd' c))
+
+-- Obtener las tablas en el contexto actual
+giveMeTableNames :: Query TableNames
+giveMeTableNames = Q(\c -> return $ Right (c,HM.keys $ trd' c))
+
+-- Unir los contextos de 2 tablas  en una sola
+joinContext:: TableName -> TableName -> TableName -> Query ()
+joinContext nk k1 k2 = Q(\c -> return $ Right ((fst' c,joinContext' nk k1 k2 $ snd' c,joinContext' nk k1 k2 $ trd' c),()))
+
+joinContext' :: TableName -> TableName -> TableName -> HM.HashMap TableName (HM.HashMap FieldName a) -> HM.HashMap TableName (HM.HashMap FieldName a)
+joinContext' nk k1 k2 vals = let newV = (vals HM.! k1) `HM.union` (vals HM.! k2)
+                                 vals' = HM.delete k1  $ HM.delete k2 vals
+                             in vals' `HM.union` HM.singleton nk newV
