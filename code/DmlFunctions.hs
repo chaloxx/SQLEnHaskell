@@ -297,7 +297,7 @@ conversion (End) = []
 -- Mapear valores de las variables
 proy :: TableNames -> [Args] -> Reg -> Query Reg
 proy names ls reg = do -- Actualizar valores en el
-                       fromRegisterToContext reg
+                       fromRegisterToContext names reg
                        proys <- sequence $ map (proy' names) ls
                        -- Unir proyecciones individuales para formar un registro
                        return $  foldl (\x y -> union x y) emptyHM proys
@@ -334,7 +334,7 @@ proy' s (As exp (Field f)) =  do reg <- proy' s exp
 
 -- Operador '.'
 proy' s e@(Dot t v) =  do vals <- askVals
-                          x <- fromEither $ lookupList vals [t] v
+                          x <- fromEither $ lookupList vals [t] v                          
                           return $ singleton (show2 e)  x
 
 
@@ -418,7 +418,9 @@ runQuery'  ((_,Pi unique args):rs) =
                                                                        distinct unique [newTabName] newFields t
                                             else  do -- Obtener que atributos deben mantenerse en el contexto
                                                      let fieldInContext = toFieldName2 args
-                                                     collapseContext newTabName names fieldInContext
+                                                     tabVals <- askVals
+                                                     if length names /= 1 then collapseContext newTabName names fieldInContext
+                                                     else return ()
                                                      distinct unique  [newTabName] newFields t -- Borrar atributos innecesarios
 
 
@@ -447,9 +449,9 @@ runQuery'  ((_,Pi unique args):rs) =
         toFieldName2 ((As _ (Field v)):xs) =  v : toFieldName2 xs
 
         -- Eliminar registros duplicados si se solicita
-        distinct unique names fields table = if unique then let table' = mergeT (comp fields) E table in
-                                                            retOk  (True,names,fields,[table'])
-                                             else retOk (False,names,fields,[table])
+        distinct unique names fields table = return $ if unique then let table' = mergeT (comp fields) E table in
+                                                                     (True,names,fields,[table'])
+                                                      else  (False,names,fields,[table])
          -- Chequear el tipo de una lista de expresiones
 
         isNull [] = emptyT
@@ -469,12 +471,9 @@ runQuery' ((_,Sigma exp):xs) =
          tabTypes <- askTypes
          tabNames <- giveMeTableNames
          let tabNames' = localNames ++ [x | x<-tabNames, not $ x `elem` localNames]
-         onlyFields <- giveMeOnlyFields
          fromEither $  checkTypeBoolExp exp tabNames' tabTypes
          t' <- ioEitherFilterT (\reg-> do -- Actualizar contexto
-                                          tabVals <- askVals
-                                          fromRegisterToContext reg
-                                          tabVals <- askVals                                          
+                                          fromRegisterToContext localNames reg
                                           -- Evaluar expresión booleana
                                           evalBoolExp tabNames'  exp) t
          return (b,localNames,fields,[t'])
@@ -505,7 +504,7 @@ runQuery' ((_,Hav exp):xs) = do (b,names,fields,tables) <- runQuery' xs
                                -- Reemplazar valores en expresion
  where mapFun names e t = do exp <- replaceAgg names e t
                              onlyFields <- giveMeOnlyFields
-                             fromRegisterToContext $ value t
+                             fromRegisterToContext names $ value t
                              evalBoolExp names exp
 
 
@@ -615,7 +614,6 @@ prod (s:xs) = do  (n,f,t1) <- prod' s
 -- Primer caso : Subconsulta con renombre
 prod' :: Args -> Query (TableName,FieldNames,Tab)
 prod' (Subquery s) = let c = conversion s
-
                      in do (b,names,fields,table)  <- runQuery' c
                            if b || length names /= 1 then errorProd2
                            else let ([n],[t]) = (names,table) in return (n,fields,t)
@@ -635,10 +633,7 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
                                           let tabNames' = ns ++ [x | x<-tabNames, not $ x `elem` ns]
                                           fromEither $ checkTypeBoolExp exp tabNames' tabTypes
                                           case j of
-                                            Inner -> do  t' <- ioEitherFilterT (\reg-> do
-                                                                                          fromRegisterToContext reg
-                                                                                          --tabVals <- askVals
-                                                                                          --fromIO $ put $ show tabVals
+                                            Inner -> do  t' <- ioEitherFilterT (\reg-> do fromRegisterToContext ns reg
                                                                                           -- Evaluar expresión booleana
                                                                                           evalBoolExp tabNames'  exp) t
                                                          let [n1,n2] = ns
@@ -656,6 +651,7 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
 
 -- Segundo caso : Tabla con renombre
 prod' (As arg (Field n)) = do (n2,scheme,t) <- prod' arg
+                              tabVals <- askVals
                               updateKeyContext n2 n
                               return (n,scheme,t)
 
@@ -763,7 +759,7 @@ evalAgg''' d s t e f = if d then let t' = mergeT (comp [s]) E t
 -- Abstracción para escribir menos código
 --abstract :: Args -> FieldNames -> (Float -> Float -> Float -> Float) -> Query Args
 abstract arg  names f  = \ x y z -> do onlyFields <- giveMeOnlyFields
-                                       fromRegisterToContext x
+                                       fromRegisterToContext names x
                                        v1 <- y
                                        v2 <- z
                                        let op = f v1 v2
@@ -872,9 +868,10 @@ evalBoolExp s (NEqual  exp1 exp2) = evalBoolExp' (/=)  exp1 exp2 s
 evalBoolExp s (GEqual  exp1 exp2) = evalBoolExp' (>=)  exp1 exp2 s
 
 
--- Determina si la consulta dml es vacía en el contexto g
+-- Determina si la consulta dml es vacía
 evalBoolExp _ (Exist dml) = do let c = conversion  dml
-                               (_,_,_,ls)<- runQuery' c
+                               (_,ts,_,ls)<- runQuery' c
+                               --deleteFromContext ts
                                if length ls /= 1 then errorExist
                                  else  let [t] = ls in
                                        return $ not $ isEmpty t
@@ -885,11 +882,12 @@ evalBoolExp _ (Exist dml) = do let c = conversion  dml
 -- Determina si el valor referido por el campo v pertenece a l
 evalBoolExp s (InVals (Field v) l) = do vals <- askVals
                                         x <- fromEither $ lookupList vals s v
-                                        retOk $ elem x l
+                                        return $ elem x l
 
 
 -- Evalua si el valor de la variable field está en la columna que es resultado de dml
-evalBoolExp s (InQuery (Field f1) dml) = do (b,ts,fs,ls) <-runQuery' $ conversion dml
+evalBoolExp s (InQuery (Field f1) dml) = do tabTypes <- askTypes
+                                            (b,ts,fs,ls) <-runQuery' $ conversion dml
                                             tabTypes <- askTypes
                                             if length fs /= 1 || b || length ls /= 1 then error "Error" -- La busqueda debe ser sobre una columna
                                             else let [f2] = fs
@@ -901,8 +899,6 @@ evalBoolExp s (InQuery (Field f1) dml) = do (b,ts,fs,ls) <-runQuery' $ conversio
                                                         else do vals <- askVals
                                                                 v <- fromEither $ lookupList vals s f1
                                                                 let r = fromList $ [(f2,v)]
-                                                                -- fromIO $ put $  show v
-                                                                -- fromIO $ put $  show t
                                                                 return $ isMember [f2] r t
 
 

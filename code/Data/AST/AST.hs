@@ -81,13 +81,24 @@ updateFieldsInContext n (_ : xs) = updateFieldsInContext n xs
 updateKey  ::  (Eq k, Hashable k) => k -> k -> HM.HashMap k v -> HM.HashMap k v
 updateKey oldKey newKey m = deleteHM oldKey $ insertHM newKey (m HM.! oldKey) m
 
+-- Collapsa una parte del contexto bajo un nuevo nombre de tabla
+-- collapseContext :: TableName -> TableNames -> FieldNames -> Query ()
+-- collapseContext t ts fs = Q(\c -> let newVals = HM.singleton t $ recoverFromContext ts fs $ snd' c
+--                                       newTypes = HM.singleton t $ recoverFromContext ts fs $ trd' c
+--                                       tabVals' = deleteFromContext ts $ snd' c
+--                                       tabTypes' = deleteFromContext ts $ trd' c
+--                                       c' = (fst' c,newVals `HM.union` tabVals',newTypes `HM.union` tabTypes')
+--                                   in return $ Right (c',()))
+
+
 collapseContext :: TableName -> TableNames -> FieldNames -> Query ()
-collapseContext t ts fs = Q(\c -> let newVals = HM.singleton t $ recoverFromContext ts fs $ snd' c
-                                      newTypes = HM.singleton t $ recoverFromContext ts fs $ trd' c
-                                      tabVals' = deleteFromContext ts $ snd' c
-                                      tabTypes' = deleteFromContext ts $ trd' c
-                                      c' = (fst' c,newVals `HM.union` tabVals',newTypes `HM.union` tabTypes')
-                                  in return $ Right (c',()))
+collapseContext t ts fs =   do  Q(\c -> let newVals = HM.singleton t $ recoverFromContext ts fs $ snd' c
+                                            newTypes = HM.singleton t $ recoverFromContext ts fs $ trd' c
+                                            c' = (fst' c,newVals `HM.union` (snd' c),newTypes `HM.union` (trd' c))
+                                        in return $ Right (c',()))
+                                deleteFromContext ts
+
+
 
 recoverFromContext :: TableNames -> FieldNames -> ContextFun a ->  HM.HashMap String a
 recoverFromContext [] _ _  = HM.empty
@@ -95,46 +106,37 @@ recoverFromContext (t:ts) fs c = (HM.filterWithKey (funFilter fs) $ c HM.! t) `H
 
  where funFilter fs k _ = if k  `elem`  fs then True
                           else False
-
-deleteFromContext :: TableNames -> ContextFun a -> ContextFun a
-deleteFromContext ts cf = HM.filterWithKey (funFilter ts) cf
- where funFilter ts k _ = if k `elem` ts then False
-                          else True
+--
+-- deleteFromContext :: TableNames -> ContextFun a -> ContextFun a
+-- deleteFromContext ts cf = HM.filterWithKey (funFilter ts) cf
+--  where funFilter ts k _ = if k `elem` ts then False
+--                           else True
 
 -- Pasar datos del registro al contexto
--- fromRegisterToContext :: Reg -> Query ()
--- fromRegisterToContext reg = Q(\c -> let tabVals = snd' c
---                                         tabVals' = HM.mapWithKey (mapFun reg) tabVals
---                                         c' = (fst' c,tabVals', trd' c)
---                                     in return $ Right (c',()))
---    where mapFun reg _ vals = HM.mapWithKey (mapFun' reg) vals
---          mapFun' reg k v  = if k `HM.member` reg then reg HM.! k
---                             else v
-
-
 fromRegisterToContext :: TableNames -> Reg -> Query ()
-fromRegisterToContext ts reg = Q(\c -> let tabVals = HM.filterWithKey  (filterFun ts) snd' c
-                                           tabVals' = HM.mapWithKey (mapFun reg) tabVals
+fromRegisterToContext ts reg = Q(\c -> let tabVals = snd' c
+                                           tabVals' = HM.mapWithKey (mapFun  ts reg) tabVals
                                            c' = (fst' c,tabVals', trd' c)
-                                    in return $ Right (c',()))
-   where mapFun reg _ vals = HM.mapWithKey (mapFun' reg) vals
+                                       in return $ Right (c',()))
+   where mapFun ts reg t vals = if t `elem` ts then  HM.mapWithKey (mapFun' reg) vals
+                                else vals
          mapFun' reg k v  = if k `HM.member` reg then reg HM.! k
                             else v
-         mapFun3 ts k _  = k `elem` ts
 
 
 
 
+deleteFromContext :: TableNames  -> Query ()
+deleteFromContext ts  = Q(\c ->  let newVals = deleteFromContext' ts $ snd' c
+                                     newTypes = deleteFromContext' ts $ trd' c
+                                     c' = (fst' c,newVals,newTypes)
 
---
--- deleteFromContext :: TableNames  -> Query ()
--- deleteFromContext ts fs = Q(\c ->  let newVals = deleteFromContext' ts fs $ snd' c
---                                        newTypes = deleteFromContext' ts fs $ trd' c
---                                    in return $ Right (c,newVals,newTypes))
--- deleteFromContext' :: TableNames -> ContextFun a -> ContextFun a
--- deleteFromContext' ts cf = HM.filterWithKey funFilter ts fs cf
---  where funFilter fs k _ = if k `elem` fs then False
---                           else True
+                                 in return $ Right (c',()))
+
+deleteFromContext' :: TableNames -> ContextFun a -> ContextFun a
+deleteFromContext' ts cf = HM.filterWithKey (funFilter ts) cf
+ where funFilter ts k _ = if k `elem` ts then False
+                          else True
 
 
 

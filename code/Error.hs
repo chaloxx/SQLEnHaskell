@@ -186,7 +186,7 @@ fold' = foldl (\ x y -> x ++ "," ++ y) ""
 
 msg = "Error buscando el objeto"
 
--- Realiza una busqueda exahustiva para encontrar el valor de un atributo a partir de una lista de tablas y
+-- Realiza una busqueda  para encontrar el valor de un atributo a partir de una lista de tablas y
 -- el nombre del atributo
 lookupList ::Show b => ContextFun b -> TableNames -> FieldName -> Either ErrorMsg b
 lookupList _ [] v = errorFind v

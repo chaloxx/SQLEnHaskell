@@ -37,32 +37,41 @@ FROM Persona INNER JOIN (SELECT vendedor FROM (SELECT codigo AS cod FROM Persona
              ON vendedor = codigo
 */
 
+
+
+/*e*/
+/*SELECT nombre FROM Persona JOIN (SELECT vendedor FROM Cliente AS C WHERE codigo IN (SELECT vendedor FROM Cliente)) AS s1 ON codigo = vendedor*/
+
+
+/*f*/
+
 /*
 SELECT DISTINCT nombre
-FROM Persona AS p JOIN (SELECT vendedor FROM (SELECT codigo AS cod FROM Persona JOIN PrefiereZona ON codigo = codigoCliente WHERE nombreP = "Rosario" AND nombreZ = "Centro") AS s1 JOIN Cliente ON s1.cod = Cliente.codigo ) AS s2
-             ON vendedor = codigo
+FROM Persona, (SELECT codigoCliente
+              FROM  PrefiereZona AS S0
+              WHERE  NOT EXISTS (SELECT nombreZona FROM Zona AS S1 WHERE nombrePoblacion = "Rosario"  AND
+                     NOT EXISTS (SELECT ALL FROM PrefiereZona AS S2 WHERE S2.codigoCliente = S0.codigoCliente AND  S2.nombreZ = S1.nombreZona))) AS S4
+WHERE Persona.codigo = S4.codigoCliente
 */
 
-/*SELECT nombre FROM Persona JOIN (SELECT vendedor FROM Cliente WHERE codigo IN (SELECT vendedor FROM Cliente)) AS s1 ON codigo = vendedor;*/
 
-/*SELECT vendedor FROM Cliente AS C WHERE codigo IN (SELECT vendedor AS codVendedor FROM Cliente)*/
-
+/*g*/
 
 
 
 
-/*SELECT Persona.nombre, Persona.apellido, Inmueble.codigo, Inmueble.nombreZ, Inmueble.precio*/
-/*FROM   Persona, PrefiereZona, Limita, Inmueble*/
-/*WHERE  Persona.codigo = PrefiereZona.codigoCliente AND*/ /*Zonas preferidas*/
-  /*     (Limita.nombreP = PrefiereZona.nombreP AND*/ /*Zonas limitrofes a las preferidas*/
-       /*Limita.nombreZ = PrefiereZona.nombreZ AND*/
-       /*Inmueble.nombreP = Limita.nombreP2 AND*/ /*Inmuebles en zonas limitrofes*/
-       /*Inmueble.nombreZ = Limita.nombreZ2*/
+SELECT Persona.nombre, Persona.apellido, Inmueble.codigo, Inmueble.nombreZ, Inmueble.precio
+FROM   Persona, PrefiereZona, Limita, Inmueble
+WHERE  Persona.codigo = PrefiereZona.codigoCliente /*AND
+       (Limita.nombreP = PrefiereZona.nombreP AND
+       Limita.nombreZ = PrefiereZona.nombreZ AND
+       Inmueble.nombreP = Limita.nombreP2 AND
+       Inmueble.nombreZ = Limita.nombreZ2)*/
        /*OR
-       Limita.nombreP2 = PrefiereZona.nombreP AND*/ /*Zonas limitrofes a las preferidas*/
-       /*Limita.nombreZ2 = PrefiereZona.nombreZ AND*/
-       /*Inmueble.nombreP = Limita.nombreP AND*/ /*Inmuebles en zonas limitrofes*/
-       /*Inmueble.nombreZ = Limita.nombreZ)*/
+       Limita.nombreP2 = PrefiereZona.nombreP AND
+       Limita.nombreZ2 = PrefiereZona.nombreZ AND
+       Inmueble.nombreP = Limita.nombreP AND
+       Inmueble.nombreZ = Limita.nombreZ)*/
 
 
        /*
