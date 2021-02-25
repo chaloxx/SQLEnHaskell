@@ -334,7 +334,7 @@ proy' s (As exp (Field f)) =  do reg <- proy' s exp
 
 -- Operador '.'
 proy' s e@(Dot t v) =  do vals <- askVals
-                          x <- fromEither $ lookupList vals [t] v                          
+                          x <- fromEither $ lookupList vals [t] v
                           return $ singleton (show2 e)  x
 
 
@@ -412,6 +412,7 @@ runQuery'  ((_,Pi unique args):rs) =
                                             t <- ioEitherMapT (proy names args) (isNull tables) -- Aplicar proyecciones
                                             let newFields= toFieldName fields args    -- Obtener strings para imprimir de atributos solicitados
                                             let newTabName = foldl (++) "" names
+                                            fromIO $ put newTabName
                                             updateFieldsInContext newTabName args
                                             tabVals <- askVals
                                             if All `elem` args then do collapseContext newTabName names fields
@@ -575,37 +576,25 @@ prod :: [Args] -> Query (TableNames,FieldNames,Tab)
 prod [] = retFail "Sin argumentos"
 
 
-prod [s] = do (n,f,t) <- prod' s
-              return ([n],f,t)
+prod [s] = do (n,fs,t1) <- prod' s
+              let fs' = map (\x -> n++x) fs
+              t1' <- ioEitherMapT (\reg -> return $ funMap n fs reg) t1
+              sequence $ map (\f -> updateFieldsInContext' n f (n++f)) fs
+              return ([n],fs',t1')
+  where  funMap n fs reg = foldl union emptyHM $ map (\f -> singleton (n++f) (reg ! f)) fs
 
 
-prod (s:xs) = do  (n,f,t1) <- prod' s
-                  (ns,fs,t2) <- prod xs
-                  let fs' = f++fs
-                  return (n:ns,fs',prod'' fs' t1 t2)
+-- Esto se hace para evitar que se pierdan valores
+-- dado que dentro de un hashmap todas las llaves deben ser únicas
+prod (s:xs) = do  (n,fs,t1) <- prod [s]
+                  (ns,fs2,t2) <- prod xs
+                  let fs' = fs++fs2
+                  return (n++ns,fs',prod'' fs' t1 t2)
 
 
--- --
--- --
--- -- -- Caso 2 tablas, se agrega nombre de tabla al nombre del campo para evitar ambiguedad
--- -- prod ([s1,s2]) = do  (n1,fields1,t1) <- prod' s1
--- --                      (n2,fields2,t2) <- prod' s2
--- --                      let (t1',t2') = mapT (changeKey n1 fields1) t1 ||| mapT (changeKey n2 fields2) t2
--- --                      let (fields1',fields2') = map (dot n1) fields1 ||| map (dot n2) fields2
--- --                      let fullFields = fields1' ++ fields2'
--- --                      return $ ([n1,n2],fullFields,prod'' fullFields t1' t2')
---
--- -- Caso 3 o más tablas
--- prod (s:ls) = do  (n1,fields1,t1) <- prod ls
---                   (n2,fields2,t2) <- prod' s
---                   let t2' = mapT (changeKey n2 fields2) t2
---                   retOk $ (n2:n1,allFields, prod'' allFields t1 t2')
---
--- --dot s x = s ++ "." ++ x
---
--- -- Cambiar llaves de los registros
--- changeKey _ [] _ = emptyHM
--- changeKey s (x:xs) r = union ((singleton (dot s x)) (r ! x)) (changeKey s xs r)
+
+
+
 
 
 
@@ -672,7 +661,7 @@ createHMWithNull (x:xs) = union (singleton x Nulo) (createHMWithNull xs)
 
 
 -- Producto cartesiano (segundo nivel),realiza el producto entre 2 tablas
-prod'' :: [String] -> Tab -> Tab -> Tab
+prod'' :: FieldNames -> Tab -> Tab -> Tab
 prod'' _ E t = E
 prod'' _ t E = E
 prod'' fields t1 t2 = let (tl,tr) = prod'' fields (left t1) t2 ||| prod'' fields (right t1) t2
@@ -868,6 +857,7 @@ evalBoolExp s (NEqual  exp1 exp2) = evalBoolExp' (/=)  exp1 exp2 s
 evalBoolExp s (GEqual  exp1 exp2) = evalBoolExp' (>=)  exp1 exp2 s
 
 
+
 -- Determina si la consulta dml es vacía
 evalBoolExp _ (Exist dml) = do let c = conversion  dml
                                (_,ts,_,ls)<- runQuery' c
@@ -886,20 +876,23 @@ evalBoolExp s (InVals (Field v) l) = do vals <- askVals
 
 
 -- Evalua si el valor de la variable field está en la columna que es resultado de dml
-evalBoolExp s (InQuery (Field f1) dml) = do tabTypes <- askTypes
-                                            (b,ts,fs,ls) <-runQuery' $ conversion dml
-                                            tabTypes <- askTypes
-                                            if length fs /= 1 || b || length ls /= 1 then error "Error" -- La busqueda debe ser sobre una columna
-                                            else let [f2] = fs
-                                                     [t] = ls
-                                                  in do tabTypes <- askTypes
-                                                        t1 <- fromEither $ lookupList tabTypes s f1 -- Buscamos los tipos
-                                                        t2 <- fromEither $ lookupList tabTypes (s++ts) f2
-                                                        if t1 /= t2 then  error "Algo anda mal" -- Deben coincidir
-                                                        else do vals <- askVals
-                                                                v <- fromEither $ lookupList vals s f1
-                                                                let r = fromList $ [(f2,v)]
-                                                                return $ isMember [f2] r t
+evalBoolExp s (InQuery arg dml) = do tabTypes <- askTypes
+                                     (b,ts,fs,ls) <-runQuery' $ conversion dml
+                                     tabTypes <- askTypes
+                                     if length fs /= 1 || b || length ls /= 1 then error "Error" -- La busqueda debe ser sobre una columna
+                                     else let [f2] = fs
+                                              [t] = ls
+                                          in do tabTypes <- askTypes
+                                                let (table,name) = case arg of
+                                                                        (Field v) -> (s,v)
+                                                                        (Dot t v) -> ([t],v)
+                                                t1 <- fromEither $ lookupList tabTypes table name -- Buscamos los tipos
+                                                t2 <- fromEither $ lookupList tabTypes ts f2
+                                                if t1 /= t2 then  error "Algo anda mal" -- Deben coincidir
+                                                else do vals <- askVals
+                                                        v <- evalIntExp s arg
+                                                        let r = fromList $ [(f2,v)]
+                                                        return $ isMember [f2] r t
 
 
 
@@ -920,6 +913,7 @@ evalBoolExp s (Like f p) = do tabTypes <- askTypes
         findPattern _ _ = False
 
 
+evalBoolExp _ exp = error $ show exp
 
 applyEval:: TableNames -> BoolExp -> BoolExp -> (Bool -> Bool -> Bool) -> Query Bool
 applyEval s exp1 exp2 op = do b1 <-  evalBoolExp s exp1

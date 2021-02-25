@@ -113,10 +113,10 @@ import Error (errorComOpen,errorComClose)
 
 
 
-%nonassoc SET WHERE
+
 %left NOT
-%nonassoc BoolExp
-%left OR AND
+%left OR
+%left AND
 %right ','
 %nonassoc '=' '>' '<'
 %nonassoc LIKE EXIST AS
@@ -231,8 +231,8 @@ Fields :: {[Args]}
      | Fields ',' Fields {$1 ++ $3}
 
 BoolExpW :: {BoolExp}
-         : BoolExpW AND BoolExpW     {And $1 $3}
-         | '(' BoolExpW ')'          {$2}
+         : '(' BoolExpW ')'          {$2}
+         | BoolExpW AND BoolExpW     {And $1 $3}
          | BoolExpW OR  BoolExpW     {Or $1 $3}
          | ValueW GE ValueW          {GEqual $1 $3}
          | ValueW LE ValueW           {LEqual $1 $3}

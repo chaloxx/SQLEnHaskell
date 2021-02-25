@@ -192,7 +192,7 @@ lookupList ::Show b => ContextFun b -> TableNames -> FieldName -> Either ErrorMs
 lookupList _ [] v = errorFind v
 lookupList g q@(y:ys) v = case lookup y g of
                            Nothing -> errorFind2 y
-                           Just r -> case lookup v r of
+                           Just r -> case lookup (y++v) r of
                                       Nothing -> lookupList g ys v
                                       Just x' -> return x'
 
