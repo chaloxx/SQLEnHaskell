@@ -870,9 +870,12 @@ evalBoolExp _ (Exist dml) = do let c = conversion  dml
 
 
 -- Determina si el valor referido por el campo v pertenece a l
-evalBoolExp s (InVals (Field v) l) = do vals <- askVals
-                                        x <- fromEither $ lookupList vals s v
-                                        return $ elem x l
+evalBoolExp s (InVals arg l) = do vals <- askVals
+                                  let (table,name) = case arg of
+                                                       (Field v) -> (s,v)
+                                                       (Dot t v) -> ([t],v)
+                                  x <- fromEither $ lookupList vals table name
+                                  return $ elem x l
 
 
 -- Evalua si el valor de la variable field está en la columna que es resultado de dml

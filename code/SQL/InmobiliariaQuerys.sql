@@ -75,31 +75,42 @@ WHERE  Persona.codigo = PrefiereZona.codigoCliente AND
        Persona.codigo IN
        (SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ,Inmueble AS I
                                                      WHERE Cliente.codigo = PZ.codigoCliente AND
-                                                          I.nombreP = PZ.nombreP AND
-                                                          I.nombreZ = PZ.nombreZ AND
+                                                          Inmueble.nombreP = PZ.nombreP AND
+                                                          Inmueble.nombreZ = PZ.nombreZ AND
                                                           NOT EXISTS (SELECT ALL FROM Visitas WHERE
                                                                       Visitas.codigoCliente = Cliente.codigo AND
-                                                                      Visitas.codigoInmueble = I.codigo)));
+                                                                      Visitas.codigoInmueble = Inmueble.codigo)));
 */
 
 
 SELECT Persona.nombre, Persona.apellido, Inmueble.codigo, Inmueble.nombreZ, Inmueble.precio
-FROM   Persona, PrefiereZona AS PZ, Limita, Inmueble AS I
+FROM   Persona, PrefiereZona AS PZ, Limita, Inmueble
 WHERE  Persona.codigo = PZ.codigoCliente AND
        (Limita.nombreP = PZ.nombreP AND
        Limita.nombreZ = PZ.nombreZ AND
-       I.nombreP = Limita.nombreP2 AND
-       I.nombreZ = Limita.nombreZ2
+       Inmueble.nombreP = Limita.nombreP2 AND
+       Inmueble.nombreZ = Limita.nombreZ2
        OR
        Limita.nombreP2 = PZ.nombreP AND
        Limita.nombreZ2 = PZ.nombreZ AND
-       I.nombreP = Limita.nombreP AND
-       I.nombreZ = Limita.nombreZ) AND
-       Persona.codigo IN
-       (SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
+       Inmueble.nombreP = Limita.nombreP AND
+       Inmueble.nombreZ = Limita.nombreZ) AND
+       Persona.codigo IN (1001,1011,1013)
+       /*(SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
                                                      WHERE Cliente.codigo = PZ2.codigoCliente AND
                                                           I2.nombreP = PZ2.nombreP AND
                                                           I2.nombreZ = PZ2.nombreZ AND
                                                           NOT EXISTS (SELECT ALL FROM Visitas WHERE
                                                                       Visitas.codigoCliente = Cliente.codigo AND
                                                                       Visitas.codigoInmueble = I2.codigo)));
+*/
+
+/*
+SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
+                                              WHERE Cliente.codigo = PZ2.codigoCliente AND
+                                                   I2.nombreP = PZ2.nombreP AND
+                                                   I2.nombreZ = PZ2.nombreZ AND
+                                                   NOT EXISTS (SELECT ALL FROM Visitas WHERE
+                                                               Visitas.codigoCliente = Cliente.codigo AND
+                                                               Visitas.codigoInmueble = I2.codigo))
+*/
