@@ -399,7 +399,7 @@ runQuery' g ((_,Inters a1 a2):xs) = runQuery'' g a1 a2 xs intersectionT
 runQuery' g ((_,Dif a1 a2):xs) = runQuery'' g a1 a2 xs differenceT
 -}
 
-
+runQuery' [] = return (False,[],[],[emptyT])
 
 -- Realiza proyecciones
 runQuery'  ((_,Pi unique args):rs) =
@@ -486,15 +486,11 @@ runQuery' ((_,Sigma exp):xs) =
 -- Agrupa por atributos
 runQuery' ((_,Group args):xs) = do (_,tables,fields,[t]) <- runQuery' xs
                                    let ls = map show2 args
-                                   let (setArgs,setFields) = toSet ls ||| toSet fields
-                                   if isSubset setArgs setFields then do let t' = group ls t
-                                                                         return (True,tables,fields,t')
-                                   else errorGroup (diff setArgs setFields)
+                                   ts <- group tables ls t
+                                   return (True,tables,fields,ts)
 
-    where toSet = S.fromList
-          isSubset = S.isSubsetOf
-          diff = S.difference
 
+  
 runQuery' ((_,Hav exp):xs) = do (b,names,fields,tables) <- runQuery' xs
                                 if not b then errorHav
                                 else do  tabTypes <- askTypes
@@ -618,7 +614,6 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
                                   if length ns /= 2 then retFail "Error en join"
                                   else do tabTypes <- askTypes
                                           tabNames <- giveMeTableNames
-                                          onlyFields <- giveMeOnlyFields
                                           let tabNames' = ns ++ [x | x<-tabNames, not $ x `elem` ns]
                                           fromEither $ checkTypeBoolExp exp tabNames' tabTypes
                                           case j of
@@ -630,10 +625,13 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
                                                          joinContext nn n1 n2
                                                          return (nn,fs,t')
 
+                                            --JLeft -> retOk $ (g',groupBym,table:names,mapT f t3)
+       --where mapJoin
+
 
 
                                         --              JRight -> retOk $ (g',groupBym,table:names,mapT f t3)
-                                        --              JLeft -> retOk $ (g',groupBym,table:names,mapT f t3)
+                                        --
 
 
 
@@ -774,13 +772,18 @@ negInf = - 1/0
 -- Elimina elementos duplicados si se solicita previamente a aplicar la función de agregado
 
 
--- Toma una lista de atributos y un árbol y descompone el árbol en clases según los atributos recibidos
-group :: [String] -> AVL (HashMap String Args) -> [AVL (HashMap String Args)]
-group _ E = []
-group xs t = let a = value t
-                 v = fromList $ map (\x -> (x,a ! x)) xs
-                 (t1,t2) = particionT (equal xs v) t
-             in t2 : group xs t1
+-- Construye una lista de tablas que agrupan registros con el
+-- mismo valor para los atributos xs
+group :: TableNames ->FieldNames -> Tab -> Query [Tab]
+group _ _ E = return []
+group ts  xs t = do  let reg = value t
+                     fromRegisterToContext ts reg
+                     tabVals <- askVals
+                     vs <- fromEither $ sequence $ map (\x -> lookupList tabVals ts x) xs
+                     let reg' = fromList $ zip xs vs
+                     let (t1,t2) = particionT (equal xs reg') t
+                     res <- group ts xs t1
+                     return $ t2 : res
 
       where equal xs v x = case comp xs v x of
                             Eq _ -> True
