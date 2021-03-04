@@ -5,8 +5,8 @@
 module Check where
 
 import AST (Args(..),Type(..),Tab,BoolExp(.. ),Types,Reg,ContextFun,ForeignKey,Env,RefOption(..),(////),Types
-            ,show2,TableInfo(..),Key,Query(..),TableName,ErrorMsg,TableNames)
-import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,lookupList,errorForeignKey,errorCheckTyped,errorCheckLength,retOk,
+            ,show2,TableInfo(..),Key,Query(..),TableName,ErrorMsg,TableNames,lookupList)
+import Error (exitToInsert,fold,typeOfArgs,errorKey,typeError,errorForeignKey,errorCheckTyped,errorCheckLength,retOk,
               ok,errorCheckNull,errorCheckForeignKey)
 import Data.HashMap.Strict hiding (map)
 import Avl (isMember)

@@ -1,6 +1,6 @@
 module AST where
 import Avl (AVL(..),mapT,pushL,join,value,left,right,emptyT)
-import qualified Data.HashMap.Strict as HM  (HashMap (..),insert,delete,empty,update,fromList,(!),mapWithKey,keys,map,union,singleton,filterWithKey,member)
+import qualified Data.HashMap.Strict as HM  (HashMap (..),insert,delete,empty,update,fromList,(!),mapWithKey,keys,map,union,singleton,filterWithKey,member,lookup)
 import qualified Data.Set as S
 import Data.Hashable
 import Data.Typeable (TypeRep)
@@ -71,7 +71,25 @@ updateFieldsInContext _  [] = return ()
 
 updateFieldsInContext n  ((As (Field v1) (Field v2)) : xs) = do updateFieldsInContext n xs
                                                                 updateFieldsInContext' n v1 v2
+
+
+-- Agregar campo con función de agregado
+updateFieldsInContext n (a@(A2 f) : xs) = do updateFieldsInContext n xs
+                                             Q(\c -> do let tabVals = snd' c
+                                                        let tabTypes = trd' c
+                                                        let field =  n ++  show2 a
+                                                        let newVals = HM.singleton field  Nulo `HM.union` (tabVals HM.! n)
+                                                        let newTypes = HM.singleton field Float `HM.union` (tabTypes HM.! n)
+                                                        let tabVals' =  HM.singleton n newVals  `HM.union` tabVals
+                                                        let tabTypes' = HM.singleton n newTypes `HM.union` tabTypes
+                                                        let c' = (fst' c,tabVals', tabTypes')
+                                                        return $ Right (c',()))
+
+
+
 updateFieldsInContext n (_ : xs) = updateFieldsInContext n xs
+
+
 
 updateFieldsInContext' :: TableName -> FieldName -> FieldName -> Query ()
 updateFieldsInContext' n v1 v2 = Q(\c -> let vals = updateKey v1 v2 $ snd' c HM.! n
@@ -95,26 +113,44 @@ updateKey oldKey newKey m = deleteHM oldKey $ insertHM newKey (m HM.! oldKey) m
 --                                   in return $ Right (c',()))
 
 
+-- collapseContext :: TableName -> TableNames -> FieldNames -> Query ()
+-- collapseContext t ts fs =   do  Q(\c -> let newVals = HM.singleton t $  recoverFromContext ts fs $ snd' c
+--                                             newTypes = HM.singleton t $ recoverFromContext ts fs $ trd' c
+--                                             c' = (fst' c,newVals `HM.union` (snd' c),newTypes `HM.union` (trd' c))
+--                                         in return $ Right (c',()))
+--                                 if length ts == 1 && (let [t'] = ts in t' == t) then return ()
+--                                 else deleteFromContext ts
+
+-- Unificar los valores del contexto de las tablas ts
 collapseContext :: TableName -> TableNames -> FieldNames -> Query ()
-collapseContext t ts fs =   do  Q(\c -> let newVals = HM.singleton t $ recoverFromContext ts fs $ snd' c
-                                            newTypes = HM.singleton t $ recoverFromContext ts fs $ trd' c
-                                            c' = (fst' c,newVals `HM.union` (snd' c),newTypes `HM.union` (trd' c))
-                                        in return $ Right (c',()))
-                                deleteFromContext ts
+collapseContext t ts fs = do  tabTypes <- askTypes
+                              types <- fromEither $ recoverFromContext ts fs tabTypes
+                              let newTypes = HM.singleton t types
+                              let newVals = HM.singleton t $ HM.fromList $ map (\f -> (f,Nulo)) fs
+                              Q(\c -> let c' = (fst' c,newVals `HM.union` (snd' c),newTypes `HM.union` (trd' c))
+                                      in return $ Right (c',()))
 
 
 
-recoverFromContext :: TableNames -> FieldNames -> ContextFun a ->  HM.HashMap String a
-recoverFromContext [] _ _  = HM.empty
-recoverFromContext (t:ts) fs c = (HM.filterWithKey (funFilter fs) $ c HM.! t) `HM.union` recoverFromContext ts fs c
-
- where funFilter fs k _ = if k  `elem`  fs then True
-                          else False
+-- recoverFromContext :: TableNames -> FieldNames -> ContextFun a ->  HM.HashMap String a
+-- recoverFromContext [] _ _  = HM.empty
+-- recoverFromContext (t:ts) fs c = let tabVals = (HM.filterWithKey (funFilter t fs) $ c HM.! t) `HM.union` recoverFromContext ts fs c
 --
--- deleteFromContext :: TableNames -> ContextFun a -> ContextFun a
--- deleteFromContext ts cf = HM.filterWithKey (funFilter ts) cf
---  where funFilter ts k _ = if k `elem` ts then False
---                           else True
+--  where funFilter t fs k _ = if k  `elem`  fs || k `elem` map (\f -> t++f) fs then True
+--                             else False
+
+
+recoverFromContext :: TableNames -> FieldNames -> ContextFun a -> Either ErrorMsg (HM.HashMap String a)
+recoverFromContext _ [] _  = return $ HM.empty
+recoverFromContext ts (f:fs) c = do x <- lookupList c ts f
+                                    xs <- recoverFromContext ts fs c
+                                    return $ HM.singleton f x `HM.union` xs
+
+ where funFilter t fs k _ = if k  `elem`  fs || k `elem` map (\f -> t++f) fs then True
+                            else False
+
+
+
 
 -- Pasar datos del registro al contexto
 fromRegisterToContext :: TableNames -> Reg -> Query ()
@@ -581,7 +617,7 @@ createInfoRegister2 e n =  (createInfoRegister e) `HM.union` (HM.singleton "tabl
 
 
 
-printTable :: Show v => (v -> String) -> [String] -> AVL (HM.HashMap String v) -> IO ()
+printTable :: Show b =>  (b -> String) -> FieldNames -> AVL (HM.HashMap String b) -> IO ()
 printTable print s t =
   do r <- size
      case r of
@@ -636,3 +672,27 @@ joinContext' :: TableName -> TableName -> TableName -> HM.HashMap TableName (HM.
 joinContext' nk k1 k2 vals = let newV = (vals HM.! k1) `HM.union` (vals HM.! k2)
                                  vals' = HM.delete k1  $ HM.delete k2 vals
                              in vals' `HM.union` HM.singleton nk newV
+
+-- Realiza una busqueda  para encontrar el valor de un atributo a partir de una lista de tablas y
+lookupList ::ContextFun b -> TableNames -> FieldName -> Either ErrorMsg b
+lookupList _ [] v = errorFind v
+lookupList g q@(y:ys) v = case HM.lookup y g of
+                          Nothing -> errorFind2 y
+                          Just r -> let field = y++v in
+                                     case HM.lookup field r of
+                                       Nothing -> lookupList g ys v
+                                       Just x' -> return x'
+
+-- Lo mismo que lookupList para devuelve la clave con la que encuentra el atributo
+lookupList' ::Show b => ContextFun b -> TableNames -> FieldName -> Either ErrorMsg (FieldName,b)
+lookupList' _ [] v = errorFind v
+lookupList' g q@(y:ys) v = case HM.lookup y g of
+                           Nothing -> errorFind2 y
+                           Just r -> let field = y++v in
+                                      case HM.lookup field r of
+                                         Nothing -> lookupList' g ys v
+                                         Just x' -> return (field,x')
+
+
+errorFind s = Left $ "No se pudo encontrar el atributo " ++ s
+errorFind2 s = Left $ "La tabla " ++ s  ++ " es desconocida "

@@ -69,9 +69,6 @@ errorAs = retFail $ "Error en sentencia AS"
 
 errorEvalBool s = fail $ "Atributo " ++ s " inválido"
 
-errorFind s = fail $ "No se pudo encontrar el atributo " ++ s
-
-errorFind2 s = fail $ "La tabla " ++ s  ++ " es desconocida "
 
 errorExist  = retFail "La consulta es vacía"
 
@@ -186,15 +183,6 @@ fold' = foldl (\ x y -> x ++ "," ++ y) ""
 
 msg = "Error buscando el objeto"
 
--- Realiza una busqueda  para encontrar el valor de un atributo a partir de una lista de tablas y
--- el nombre del atributo
-lookupList ::Show b => ContextFun b -> TableNames -> FieldName -> Either ErrorMsg b
-lookupList _ [] v = errorFind v
-lookupList g q@(y:ys) v = case lookup y g of
-                           Nothing -> errorFind2 y
-                           Just r -> case lookup (y++v) r of
-                                      Nothing -> lookupList g ys v
-                                      Just x' -> return x'
 
 -- Unir 2 listas, sin elementos repetidos en ambas
 unionL :: Eq e => [e] -> [e] -> [e]

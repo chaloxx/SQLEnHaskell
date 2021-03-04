@@ -339,8 +339,8 @@ proy' s e@(Dot t v) =  do vals <- askVals
 
 
 -- Clausula ALL mapea todos los atributos disponibles a valores
-proy' s (All) = do vals <- askVals
-                   return $ unions $ elems $ vals
+proy' s (All) = do tabVals <- askVals
+                   return $ unions $ elems $ tabVals
 
 
 -- -- Expresiones enteras
@@ -353,6 +353,7 @@ proy' s q = do  vals <- askVals
 
 
 -- Procesamiento de selecciones para el caso con funciones de agregado
+-- Reduce los árboles a un conjunto de registros
 processAgg  :: [Args] -> TableNames -> [Tab] -> Query ([String],Tab)
 processAgg ls names ts = do  res <- sequence $ map (processAgg' names ls) ts
                              let ls' = map show2 ls
@@ -363,11 +364,14 @@ processAgg' :: TableNames -> [Args] -> Tab -> Query Reg
 processAgg'  _ [] _ = return empty
 
 -- Se puede seleccionar cualquiera de los atributos que definen la clase
-processAgg' ns ((Field s):xs) t   = do let m = singleton s  ((value t) ! s)
+processAgg' ns ((Field s):xs) t   = do fromRegisterToContext ns $ value t
+                                       tabVals <- askVals
+                                       v <- fromEither $ lookupList tabVals ns s
+                                       let m = singleton s v
                                        reg <- processAgg' ns xs t
                                        return $  union m reg
 
--- Aplicar una función de agregado reduce la clase a un solo valor
+-- Aplicar una función de agregado reduce el árbol a un solo valor
 processAgg' ns ((A2 f):xs) t  = do reg <- processAgg' ns xs t
                                    v <- evalAgg ns (A2 f) t
                                    let m = singleton (show f) v
@@ -384,8 +388,8 @@ runQuery :: DML -> Query (FieldNames,Tab)
 runQuery dml = do -- Convertir dml en una secuencia de operadores de álgebra relacional
                   let ops = conversion dml
                   --Ejecutar
-                  (_,_,ys,[t]) <- runQuery' ops
-                  return (ys,t)
+                  (_,ns,fs,[t]) <- runQuery' ops
+                  return (fs,t)
 
 -- Ejecución de consultas
 runQuery' :: Cola AR -> Query Answer
@@ -410,18 +414,15 @@ runQuery'  ((_,Pi unique args):rs) =
                                             tabTypes <- askTypes
                                             Q(\c -> return $ fmap (\x -> (c,x)) $ checkTypedExpList names tabTypes args)
                                             t <- ioEitherMapT (proy names args) (isNull tables) -- Aplicar proyecciones
-                                            let newFields= toFieldName fields args    -- Obtener strings para imprimir de atributos solicitados
-                                            let newTabName = foldl (++) "" names
-                                            fromIO $ put newTabName
+                                            let newFields = toFieldName fields args    -- Obtener strings para imprimir de atributos solicitados
+                                            let newTabName = foldl (++) "" names                                            
                                             updateFieldsInContext newTabName args
-                                            tabVals <- askVals
-                                            if All `elem` args then do collapseContext newTabName names fields
+                                            if All `elem` args then do fromIO $ put $ show
+                                                                       collapseContext newTabName names fields
                                                                        distinct unique [newTabName] newFields t
                                             else  do -- Obtener que atributos deben mantenerse en el contexto
                                                      let fieldInContext = toFieldName2 args
-                                                     tabVals <- askVals
-                                                     if length names /= 1 then collapseContext newTabName names fieldInContext
-                                                     else return ()
+                                                     collapseContext newTabName names fieldInContext
                                                      distinct unique  [newTabName] newFields t -- Borrar atributos innecesarios
 
 
@@ -437,7 +438,12 @@ runQuery'  ((_,Pi unique args):rs) =
 
   where -- Aplica función processAgg para ejecutar funciones de agregado
         applyWithAgg unique names args tables = do (fields,tables) <- processAgg args names tables
-                                                   distinct unique names fields tables
+                                                   let newTabName = foldl (++) "" names
+                                                   let fieldInContext = toFieldName2 args
+                                                   updateFieldsInContext newTabName args
+                                                   tabTypes <- askTypes
+                                                   collapseContext newTabName names fieldInContext
+                                                   distinct unique [newTabName] fields tables
 
 
         toFieldName _ [] = []
@@ -448,6 +454,8 @@ runQuery'  ((_,Pi unique args):rs) =
         toFieldName2 (Field v : xs) = v : toFieldName2 xs
         toFieldName2 ((Dot _ v): xs) = v : toFieldName2 xs
         toFieldName2 ((As _ (Field v)):xs) =  v : toFieldName2 xs
+        toFieldName2 (arg:xs) =  show2 arg : toFieldName2 xs
+
 
         -- Eliminar registros duplicados si se solicita
         distinct unique names fields table = return $ if unique then let table' = mergeT (comp fields) E table in
@@ -484,13 +492,15 @@ runQuery' ((_,Sigma exp):xs) =
 
 
 -- Agrupa por atributos
-runQuery' ((_,Group args):xs) = do (_,tables,fields,[t]) <- runQuery' xs
+runQuery' ((_,Group args):xs) = do (_,ns,fields,[t]) <- runQuery' xs
                                    let ls = map show2 args
-                                   ts <- group tables ls t
-                                   return (True,tables,fields,ts)
+                                   ts <- group ns ls t
+                                   tabVals <- askVals
+                                   --(ls',) <- fromEither $ sequence $ map (\x -> lookupList' tabVals ns x) ls
+                                   return (True,ns,ls ,ts)
 
 
-  
+
 runQuery' ((_,Hav exp):xs) = do (b,names,fields,tables) <- runQuery' xs
                                 if not b then errorHav
                                 else do  tabTypes <- askTypes
@@ -572,16 +582,12 @@ prod :: [Args] -> Query (TableNames,FieldNames,Tab)
 prod [] = retFail "Sin argumentos"
 
 
-prod [s] = do (n,fs,t1) <- prod' s
-              let fs' = map (\x -> n++x) fs
-              t1' <- ioEitherMapT (\reg -> return $ funMap n fs reg) t1
-              sequence $ map (\f -> updateFieldsInContext' n f (n++f)) fs
-              return ([n],fs',t1')
-  where  funMap n fs reg = foldl union emptyHM $ map (\f -> singleton (n++f) (reg ! f)) fs
+prod [s] = do (n,fs,t) <- prod' s
+              return ([n],fs,t)
 
 
--- Esto se hace para evitar que se pierdan valores
--- dado que dentro de un hashmap todas las llaves deben ser únicas
+
+
 prod (s:xs) = do  (n,fs,t1) <- prod [s]
                   (ns,fs2,t2) <- prod xs
                   let fs' = fs++fs2
@@ -647,15 +653,14 @@ prod' (Field n) = do e <- askEnv
                      let (path,user) = (url  e) ||| name e in
                       do [TS scheme, TT types] <- loadInfoTable ["scheme","types"] e n-- Obtener esquema y tipos
                          t <- obtainTable path n
-                         let types' = singleton n $ fromList $ zip scheme types
-                         let fields = singleton n $ fromList $ map (\x -> (x,Nulo)) scheme
-                         -- Actualizar contexto
-                         updateContext e fields types'
-                         return (n,scheme,t)
+                         let scheme' = map (\x -> n++x) scheme
+                         let types' = singleton n $ fromList $ zip scheme' types
+                         let vals = singleton n $ fromList $ map (\x -> (x,Nulo)) scheme'
+                         t' <- ioEitherMapT (\reg -> return $ funMap n scheme reg) t
+                         updateContext e vals types'
+                         return (n,scheme',t')
 
-createHMWithNull [] = emptyHM
-createHMWithNull (x:xs) = union (singleton x Nulo) (createHMWithNull xs)
-
+   where  funMap n fs reg = foldl union emptyHM $ map (\f -> singleton (n++f) (reg ! f)) fs
 
 
 -- Producto cartesiano (segundo nivel),realiza el producto entre 2 tablas
@@ -715,13 +720,13 @@ applyAggregate' ns exp op t = do n <- evalAgg  ns exp t
 
 evalAgg':: FieldNames -> Aggregate -> Tab -> Query Float
 -- Evaluar funciones de agregado (segundo nivel)
-evalAgg' ns  (Count d arg) t = evalAgg'' arg d t (return 0) $ abstract arg ns   $ \ v1 v2 _  -> 1 + v1 + v2
+evalAgg' ns  (Count d arg) t = evalAgg'' arg d t (return 0) $ makeFun arg ns   $ \ v1 v2 _  -> 1 + v1 + v2
 
-evalAgg' ns  (Min d arg) t = evalAgg'' arg d t (retOk posInf) (abstract arg ns   (\ v1 v2 v3  -> min3 v1 v2 (toFloat v3)))
+evalAgg' ns  (Min d arg) t = evalAgg'' arg d t (return posInf) $ makeFun arg ns   (\ v1 v2 v3  -> min3 v1 v2 (toFloat v3))
 
-evalAgg' ns  (Max d arg) t = evalAgg'' arg d t (retOk 0) (abstract arg ns   (\ v1 v2 v3  -> max3 v1 v2 (toFloat v3)))
+evalAgg' ns  (Max d arg) t = evalAgg'' arg d t (return negInf) $ makeFun arg ns   (\ v1 v2 v3  -> max3 v1 v2 (toFloat v3))
 
-evalAgg' ns (Sum d arg) t = evalAgg'' arg d t (retOk 0) (abstract arg ns  (\ v1 v2 v3  -> v1 + v2 + (toFloat v3)))
+evalAgg' ns (Sum d arg) t = evalAgg'' arg d t (return 0) $ makeFun arg ns  (\ v1 v2 v3  -> v1 + v2 + (toFloat v3))
 
 evalAgg' ns (Avg d arg) t =  do  n1 <- evalAgg' ns   (Sum d arg) t
                                  n2 <- evalAgg' ns  (Count d arg) t
@@ -743,24 +748,17 @@ evalAgg''' d s t e f = if d then let t' = mergeT (comp [s]) E t
 
 
 
--- Abstracción para escribir menos código
---abstract :: Args -> FieldNames -> (Float -> Float -> Float -> Float) -> Query Args
-abstract arg  names f  = \ x y z -> do onlyFields <- giveMeOnlyFields
-                                       fromRegisterToContext names x
-                                       v1 <- y
-                                       v2 <- z
-                                       let op = f v1 v2
-                                       case arg of
-                                         (Field v) ->  abstract''  names v op
-                                         (Dot t v) -> abstract''  [t] v op
-  where abstract'' names v op  =  do  vals <- askVals
-                                      x <- fromEither $ lookupList vals names v
-                                      return $ op x
-
-
-
-
-
+-- Construye una función para mapear el árbol
+makeFun:: Args -> FieldNames -> (Float -> Float -> Args -> Float) -> (Reg -> Query Float -> Query Float -> Query Float)
+makeFun arg  names f  = \ reg y z -> do fromRegisterToContext names reg
+                                        vals <- askVals
+                                        v1 <- y
+                                        v2  <- z
+                                        let (ts,field) = case arg of
+                                                          (Field v) -> (names,v)
+                                                          (Dot t v) -> ([t],v)
+                                        v3 <- fromEither $ lookupList vals ts field
+                                        return $ f v1 v2 v3
 
 
 posInf :: Float
@@ -769,7 +767,6 @@ posInf = 1/0
 negInf :: Float
 negInf = - 1/0
 
--- Elimina elementos duplicados si se solicita previamente a aplicar la función de agregado
 
 
 -- Construye una lista de tablas que agrupan registros con el
@@ -779,9 +776,10 @@ group _ _ E = return []
 group ts  xs t = do  let reg = value t
                      fromRegisterToContext ts reg
                      tabVals <- askVals
-                     vs <- fromEither $ sequence $ map (\x -> lookupList tabVals ts x) xs
-                     let reg' = fromList $ zip xs vs
-                     let (t1,t2) = particionT (equal xs reg') t
+                     vs <- fromEither $ sequence $ map (\x -> lookupList' tabVals ts x) xs
+                     let reg' = fromList vs
+                     let (names,_) = unzip vs
+                     let (t1,t2) = particionT (equal names reg') t
                      res <- group ts xs t1
                      return $ t2 : res
 

@@ -82,7 +82,7 @@ WHERE  Persona.codigo = PrefiereZona.codigoCliente AND
                                                                       Visitas.codigoInmueble = Inmueble.codigo)));
 */
 
-
+/*
 SELECT Persona.nombre, Persona.apellido, Inmueble.codigo, Inmueble.nombreZ, Inmueble.precio
 FROM   Persona, PrefiereZona AS PZ, Limita, Inmueble
 WHERE  Persona.codigo = PZ.codigoCliente AND
@@ -95,7 +95,7 @@ WHERE  Persona.codigo = PZ.codigoCliente AND
        Limita.nombreZ2 = PZ.nombreZ AND
        Inmueble.nombreP = Limita.nombreP AND
        Inmueble.nombreZ = Limita.nombreZ) AND
-       Persona.codigo IN (1001,1011,1013)
+       Persona.codigo IN (1001,1011,1013)*/
        /*(SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
                                                      WHERE Cliente.codigo = PZ2.codigoCliente AND
                                                           I2.nombreP = PZ2.nombreP AND
@@ -114,3 +114,9 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
                                                                Visitas.codigoCliente = Cliente.codigo AND
                                                                Visitas.codigoInmueble = I2.codigo))
 */
+
+
+/*SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP*/
+
+SELECT ALL FROM SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP
+/*SELECT COUNT(precio),nombreP FROM Inmueble GROUP BY nombreP*/
