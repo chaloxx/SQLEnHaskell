@@ -1,4 +1,4 @@
- {-# LANGUAGE NoMonadFailDesugaring #-} 
+ {-# LANGUAGE NoMonadFailDesugaring #-}
 
  module Parsing where
 
@@ -100,6 +100,20 @@
                                      return (-n)
                                    <|> nat
 
+ pointNumber                           :: Parser Float
+ pointNumber                            = do char '-'
+                                             pointNumber' "-"
+                                             <|> pointNumber' ""
+   where pointNumber' sign  = do intPart <- many1 digit
+                                 char '.'
+                                 floatPart <- many1 digit
+                                 let str = sign ++  intPart ++ "." ++ floatPart
+                                 return $  read  str
+
+
+
+
+
  space                         :: Parser ()
  space                         =  do many (sat isSpace)
                                      return ()
@@ -137,6 +151,10 @@
 
  integer                       :: Parser Int
  integer                       =  token int
+
+ float                         :: Parser Float
+ float                         =  token pointNumber
+
 
  symbol                        :: String -> Parser String
  symbol xs                     =  token (string xs)
@@ -192,9 +210,12 @@
                            seconds <- integer
                            if seconds < 0 || seconds > 59 then failure
                            else return $ (A7 $ Time hour minutes seconds)
- integerArg :: Parser Args
- integerArg = do x <- integer
-                 return $ A3 x
+ number :: Parser Args
+ number =  do x <- float
+              return $ A4 x
+              <|> do  x <- integer
+                      return $ A3 x
 
 
- intParse = dateTime <|> date <|> time <|> integerArg
+
+ intParse = dateTime <|> date <|> time <|> number

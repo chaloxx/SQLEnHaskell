@@ -117,6 +117,25 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
 
 
 /*SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP*/
+/*SELECT SUM(precio),nombreP,nombreZ FROM Inmueble GROUP BY nombreP,nombreZ*/
+/*SELECT ALL FROM Inmueble GROUP BY nombreP*/
+/*SELECT ALL FROM SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP*/
+/*SELECT ALL FROM SELECT ALL FROM SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP*/
+/*SELECT nombreP FROM  (SELECT SUM(precio) AS sum,nombreP FROM Inmueble GROUP BY nombreP) WHERE sum > 1000000.0*/
+/*SELECT nombreP,nombreZ FROM Inmueble GROUP BY nombreP HAVING SUM(precio) > 1000000.0*/
+/*SELECT Inmueble.precioMedio AS precioMean AS somePrecio AS pepo FROM (SELECT AVG(precio) AS precioMedio ,nombreP FROM Inmueble GROUP BY nombreP)*/
+/*SELECT nombreP,nombreZ FROM Inmueble GROUP BY nombreP HAVING SUM(precio) > 1000000.0*/
+/*SELECT ALL FROM (SELECT nombreP FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0) AS Inmueblazo*/
+/*SELECT Inmueblazo.nombreP FROM (SELECT nombreP FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0) AS Inmueblazo*/
+/*SELECT SUM(precio) FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+SELECT SUM(precio)+1 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0
 
-SELECT ALL FROM SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP
+
+
+
+
+
+
+
+
 /*SELECT COUNT(precio),nombreP FROM Inmueble GROUP BY nombreP*/

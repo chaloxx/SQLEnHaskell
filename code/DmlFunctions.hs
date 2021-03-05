@@ -371,6 +371,8 @@ processAgg' ns ((Field s):xs) t   = do fromRegisterToContext ns $ value t
                                        reg <- processAgg' ns xs t
                                        return $  union m reg
 
+processAgg' ns (All:xs) t = errorPi3
+
 -- Aplicar una función de agregado reduce el árbol a un solo valor
 processAgg' ns ((A2 f):xs) t  = do reg <- processAgg' ns xs t
                                    v <- evalAgg ns (A2 f) t
@@ -409,19 +411,19 @@ runQuery' [] = return (False,[],[],[emptyT])
 runQuery'  ((_,Pi unique args):rs) =
  do (groupBy,names,fields,tables) <- runQuery' rs
     if not $ groupBy then case partition isAgg args of -- Separar funciones de agregado de selecciones comunes
-                            (_,[]) -> applyWithAgg unique names args tables   -- Caso con funciones de agregado
+                            -- (_,[]) -> applyWithAgg unique names args tables   -- Caso con funciones de agregado
                             ([],_) ->   do -- Caso sin funciones de agregado
                                             tabTypes <- askTypes
                                             Q(\c -> return $ fmap (\x -> (c,x)) $ checkTypedExpList names tabTypes args)
                                             t <- ioEitherMapT (proy names args) (isNull tables) -- Aplicar proyecciones
                                             let newFields = toFieldName fields args    -- Obtener strings para imprimir de atributos solicitados
-                                            let newTabName = foldl (++) "" names                                            
+                                            let newTabName = foldl (++) "" names
                                             updateFieldsInContext newTabName args
-                                            if All `elem` args then do fromIO $ put $ show
-                                                                       collapseContext newTabName names fields
+                                            if All `elem` args then do collapseContext newTabName names fields
                                                                        distinct unique [newTabName] newFields t
                                             else  do -- Obtener que atributos deben mantenerse en el contexto
                                                      let fieldInContext = toFieldName2 args
+                                                     tabTypes <- askTypes
                                                      collapseContext newTabName names fieldInContext
                                                      distinct unique  [newTabName] newFields t -- Borrar atributos innecesarios
 
@@ -431,22 +433,17 @@ runQuery'  ((_,Pi unique args):rs) =
                             _ -> errorPi2   -- Error al mezclar las operaciones
 
     -- En este caso se uso la claúsula group by
-    else  if All `elem` args then errorPi3
-          else applyWithAgg unique names args tables
+    else   do -- Aplica función processAgg para ejecutar funciones de agregado
+               (fields,tables) <- processAgg args names tables
+               let newTabName = foldl (++) "" names
+               let fieldInContext = toFieldName2 args
+               updateFieldsInContext newTabName args
+               collapseContext newTabName names fieldInContext
+               distinct unique [newTabName] fields tables
 
 
 
-  where -- Aplica función processAgg para ejecutar funciones de agregado
-        applyWithAgg unique names args tables = do (fields,tables) <- processAgg args names tables
-                                                   let newTabName = foldl (++) "" names
-                                                   let fieldInContext = toFieldName2 args
-                                                   updateFieldsInContext newTabName args
-                                                   tabTypes <- askTypes
-                                                   collapseContext newTabName names fieldInContext
-                                                   distinct unique [newTabName] fields tables
-
-
-        toFieldName _ [] = []
+  where toFieldName _ [] = []
         toFieldName fields (All:xs) = fields ++ (toFieldName fields xs)
         toFieldName fields (arg:xs) = (show2 arg) : (toFieldName fields xs)
 
@@ -481,6 +478,7 @@ runQuery' ((_,Sigma exp):xs) =
          tabNames <- giveMeTableNames
          let tabNames' = localNames ++ [x | x<-tabNames, not $ x `elem` localNames]
          fromEither $  checkTypeBoolExp exp tabNames' tabTypes
+         tabVals <- askVals
          t' <- ioEitherFilterT (\reg-> do -- Actualizar contexto
                                           fromRegisterToContext localNames reg
                                           -- Evaluar expresión booleana
@@ -501,18 +499,23 @@ runQuery' ((_,Group args):xs) = do (_,ns,fields,[t]) <- runQuery' xs
 
 
 
-runQuery' ((_,Hav exp):xs) = do (b,names,fields,tables) <- runQuery' xs
-                                if not b then errorHav
+runQuery' ((_,Hav exp):xs) = do (groupBy,names,fields,tables) <- runQuery' xs
+                                if not groupBy then errorHav
                                 else do  tabTypes <- askTypes
                                          fromEither $ checkTypeBoolExp exp names tabTypes
                                          tables' <- ioEitherFilterList (mapFun names exp) tables
-                                         return (b,names,fields,tables')
+                                         return (True,names,fields,tables')
 
                                -- Reemplazar valores en expresion
  where mapFun names e t = do exp <- replaceAgg names e t
-                             onlyFields <- giveMeOnlyFields
                              fromRegisterToContext names $ value t
                              evalBoolExp names exp
+       ioEitherFilterList f [] = retOk []
+       ioEitherFilterList f (x:xs) = do res <- ioEitherFilterList f xs
+                                        b <- f x
+                                        if b then return (x:res)
+                                        else return res
+
 
 
 
@@ -579,19 +582,20 @@ runQuery'' g a1 a2 xs op =
 
 -- Producto cartesiano (primer nivel)
 prod :: [Args] -> Query (TableNames,FieldNames,Tab)
-prod [] = retFail "Sin argumentos"
-
-
-prod [s] = do (n,fs,t) <- prod' s
-              return ([n],fs,t)
+prod [] = return ([],[],emptyT)
 
 
 
 
-prod (s:xs) = do  (n,fs,t1) <- prod [s]
+
+prod (s:xs) = do  (n,fs,t) <- prod' s
                   (ns,fs2,t2) <- prod xs
-                  let fs' = fs++fs2
-                  return (n++ns,fs',prod'' fs' t1 t2)
+                  let fs' = map (\f-> n//f) fs
+                  sequence $ map (\f -> updateFieldsInContext' n f (n//f)) fs
+                  t' <- ioEitherMapT (\reg -> return $ funMap n fs reg) t
+                  let fs'' = fs'++fs2
+                  return (n:ns,fs'',prod'' fs'' t' t2)
+      where  funMap n fs reg = foldl union emptyHM $ map (\f -> singleton (n//f) (reg ! f)) fs
 
 
 
@@ -653,20 +657,17 @@ prod' (Field n) = do e <- askEnv
                      let (path,user) = (url  e) ||| name e in
                       do [TS scheme, TT types] <- loadInfoTable ["scheme","types"] e n-- Obtener esquema y tipos
                          t <- obtainTable path n
-                         let scheme' = map (\x -> n++x) scheme
-                         let types' = singleton n $ fromList $ zip scheme' types
-                         let vals = singleton n $ fromList $ map (\x -> (x,Nulo)) scheme'
-                         t' <- ioEitherMapT (\reg -> return $ funMap n scheme reg) t
-                         updateContext e vals types'
-                         return (n,scheme',t')
+                         let tabTypes = singleton n $ fromList $ zip scheme types
+                         let tabVals = singleton n $ fromList $ map (\f -> (f,Nulo)) scheme
+                         updateContext e tabVals tabTypes
+                         return (n,scheme,t)
 
-   where  funMap n fs reg = foldl union emptyHM $ map (\f -> singleton (n++f) (reg ! f)) fs
 
 
 -- Producto cartesiano (segundo nivel),realiza el producto entre 2 tablas
 prod'' :: FieldNames -> Tab -> Tab -> Tab
-prod'' _ E t = E
-prod'' _ t E = E
+prod'' _ E t = t
+prod'' _ t E = t
 prod'' fields t1 t2 = let (tl,tr) = prod'' fields (left t1) t2 ||| prod'' fields (right t1) t2
                           t = mergeT (comp fields) tl tr
                       in mergeT (comp fields) t (prod''' (value t1) t2)
@@ -737,7 +738,7 @@ evalAgg' ns (Avg d arg) t =  do  n1 <- evalAgg' ns   (Sum d arg) t
 --evalAgg''::Args -> Bool -> Tab -> Query Float ->      -> Query Float
 evalAgg'' (Field s) d t e f  =  evalAgg''' d s t e f
 
-evalAgg'' (Dot n s) d t e f  = evalAgg''' d (n ++ "." ++ s) t e f
+evalAgg'' (Dot n s) d t e f  = evalAgg''' d (n//s) t e f
 
 
 -- Evaluar funciones de agregado (tercer nivel)
@@ -790,12 +791,7 @@ group ts  xs t = do  let reg = value t
 
 
 
-ioEitherFilterList :: (e -> Query Bool) -> [e] -> Query [e]
-ioEitherFilterList f [] = retOk []
-ioEitherFilterList f (x:xs) = do res <- ioEitherFilterList f xs
-                                 b <- f x
-                                 if b then return (x:res)
-                                 else return res
+
 
 
 -- Evals

@@ -82,6 +82,7 @@ import Error (errorComOpen,errorComClose)
      TIM              {TTim $$}
      STR              {TStr $$}
      NUM              {TNum $$}
+     NUMFLOAT         {TNumFloat $$}
      NULL             {TNull}
      INT              {TInt}
      FLOAT            {TFloat}
@@ -207,13 +208,14 @@ Exp  :: {Args}
 
 
 IntExp :: {Args}
-       : Exp '+' Exp {Plus $1 $3}
+       : '('Exp ')' {$2}
+       | Exp '+' Exp {Plus $1 $3}
        | Exp '-' Exp {Minus $1 $3}
        | Exp '*' Exp {Times $1 $3}
        | Exp '/' Exp {Div $1 $3}
-       | '('Exp ')' {Brack $2}
        | '-' Exp %prec NEG {Negate $2}
        | NUM         {A3 $1}
+       | NUMFLOAT       {A4 $1}
 
 ArgF :: {[Args]}
     : ArgF AS FIELD {let [arg] = $1 in [As arg (Field $3)]}
@@ -460,6 +462,7 @@ data Token =   TCUser
              | TNum Int
              | TString
              | TFloat
+             | TNumFloat Float
              | TInt
              | TBool
              | TNull
@@ -619,6 +622,7 @@ lexNum cont xs =  \(s1,s2) -> cont val r (s1,s2 + (dif xs r) )
                    [(A6 v,r)] -> (TDat v,r)
                    [(A7 v,r)] -> (TTim v,r)
                    [(A3 v,r)] -> (TNum v,r)
+                   [(A4 v,r)] -> (TNumFloat v,r)
 
         dif s1 s2 = (length s1) - (length s2)
 
