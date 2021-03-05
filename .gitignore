@@ -1,1 +1,3 @@
+code/*.hi
 code/*.o
+code/Init
