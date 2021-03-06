@@ -38,7 +38,7 @@ FROM Persona INNER JOIN (SELECT vendedor FROM (SELECT codigo AS cod FROM Persona
              ON vendedor = codigo
 */
 
-SELECT Persona.codigo AS cod FROM Persona JOIN PrefiereZona ON codigo = codigoCliente 
+SELECT Persona.codigo  FROM Persona JOIN PrefiereZona ON codigo = codigoCliente 
 
 /*e*/
 /*SELECT nombre FROM Persona JOIN (SELECT vendedor FROM Cliente AS C WHERE codigo IN (SELECT vendedor FROM Cliente)) AS s1 ON codigo = vendedor*/

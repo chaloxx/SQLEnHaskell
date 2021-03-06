@@ -425,7 +425,8 @@ runQuery'  ((_,Pi unique args):rs) =
                                             if All `elem` args then do collapseContext newTabName names fields
                                                                        distinct unique [newTabName] newFields t
                                             else  do -- Obtener que atributos deben mantenerse en el contexto
-                                                     let fieldInContext = toFieldName2 args                                                     
+                                                     let fieldInContext = toFieldName2 args
+                                                     fromIO $ put $ show fieldInContext
                                                      collapseContext newTabName names fieldInContext
                                                      distinct unique  [newTabName] newFields t -- Borrar atributos innecesarios
 
@@ -451,7 +452,7 @@ runQuery'  ((_,Pi unique args):rs) =
 
         toFieldName2 [] = []
         toFieldName2 (Field v : xs) = v : toFieldName2 xs
-        toFieldName2 ((Dot _ v): xs) = v : toFieldName2 xs
+        toFieldName2 ((Dot t v): xs) = (t//v) : toFieldName2 xs
         toFieldName2 ((As _ (Field v)):xs) =  v : toFieldName2 xs
         toFieldName2 (arg:xs) =  show2 arg : toFieldName2 xs
 
@@ -597,8 +598,6 @@ prod (s:xs) = do  (n,fs,t) <- prod' s
                   t' <- ioEitherMapT (\reg -> return $ funMap n fs reg) t
                   let fs'' = fs'++fs2
                   let t'' = prod'' fs'' t' t2
-                  tabTypes <- askTypes
-                  fromIO $ put $ show tabTypes
                   return (n:ns,fs'',t'')
       where  funMap n fs reg = foldl union emptyHM $ map (\f -> singleton (n//f) (reg ! f)) fs
 
