@@ -10,6 +10,7 @@ WHERE Persona.codigo = PoseeInmueble.codigoProp;
 
 
 
+
 /*b*/
 /*códigos de los inmuebles cuyo precio está en el intervalo 600.000 a 700.000
 inclusive.*/
@@ -20,7 +21,6 @@ WHERE precio >= 600000 AND precio <= 800000
 ORDER BY codigo ASC;
 */
 
-
 /*c*/
 /*Obtener los nombres de los clientes que prefieran inmuebles sólo en la zona Norte de Santa Fe.*/
 /*SELECT DISTINCT  nombre
@@ -28,16 +28,17 @@ FROM Persona,PrefiereZona AS PZ
 WHERE EXISTS( SELECT ALL FROM PrefiereZona WHERE  nombreZ = "Norte" AND nombreP = "Santa Fe" AND codigo = codigoCliente)
       AND
       NOT  EXISTS (SELECT ALL FROM PrefiereZona WHERE  (nombreZ <> "Norte" OR nombreP <> "Santa Fe") AND codigo = codigoCliente )
-      */
+  */
 
 /*d*/
+
 /*
 SELECT DISTINCT nombre
 FROM Persona INNER JOIN (SELECT vendedor FROM (SELECT codigo AS cod FROM Persona JOIN PrefiereZona ON codigo = codigoCliente WHERE nombreP = "Rosario" AND nombreZ = "Centro") AS s1 JOIN Cliente ON s1.cod = Cliente.codigo ) AS s2
              ON vendedor = codigo
 */
 
-
+SELECT Persona.codigo AS cod FROM Persona JOIN PrefiereZona ON codigo = codigoCliente 
 
 /*e*/
 /*SELECT nombre FROM Persona JOIN (SELECT vendedor FROM Cliente AS C WHERE codigo IN (SELECT vendedor FROM Cliente)) AS s1 ON codigo = vendedor*/
@@ -128,7 +129,17 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
 /*SELECT ALL FROM (SELECT nombreP FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0) AS Inmueblazo*/
 /*SELECT Inmueblazo.nombreP FROM (SELECT nombreP FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0) AS Inmueblazo*/
 /*SELECT SUM(precio) FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-SELECT SUM(precio)+1 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0
+/*SELECT SUM(precio)+1+2+3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+/*SELECT SUM(precio)+1+2+3 AS total, SUM(precio)+1+2+3 AS totales FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+/*SELECT SUM(precio)+1+2+3 AS total, SUM(precio)+1+2+3 AS total FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+/*SELECT SUM(precio) AS total, SUM(precio)*3 AS totalBy3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+/*SELECT MIN(precio) AS min, MIN(precio)*3 AS minBy3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+/*SELECT MIN(precio) AS min, MIN(precio)/3 AS minDiv3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+/*SELECT MIN(precio) , MIN(precio)/3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+/*SELECT max,maxDiv3 FROM SELECT MAX(precio) AS max , MAX(precio)/3 AS maxDiv3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+/*SELECT COUNT(direccion) AS count AS total FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+
+
 
 
 

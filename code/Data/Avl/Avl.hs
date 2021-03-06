@@ -42,7 +42,7 @@ comp (k:ks) x y =  let (v1,v2) =  (lookup k x,lookup k y) in
                                                      LT -> Lt
                                                      GT -> Gt
                                                      EQ -> comp ks x y
-                else error $  "No se encontro el atributo " ++ (show k)
+                else error $  "No se encontro el atributo " ++ (show x)
 
 -- Compara 2 registros (devuelve un Ordering)
 comp2 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Ordering
@@ -87,7 +87,7 @@ mergeT :: (e -> e -> COrdering e) -> AVL e -> AVL e -> AVL e
 mergeT f t E = t
 mergeT f t t' = let t1 = mergeT f t (left t')
                     t2 = mergeT f t1 (right t')
-               in push (f $ value t') (value t') t2
+                in push (f $ value t') (value t') t2
 
 
 

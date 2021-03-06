@@ -353,7 +353,7 @@ proy' s q = do  vals <- askVals
 
 
 -- Procesamiento de selecciones para el caso con funciones de agregado
--- Reduce los árboles a un conjunto de registros
+-- Reduce una lista de tablas a una  sola tabla
 processAgg  :: [Args] -> TableNames -> [Tab] -> Query ([String],Tab)
 processAgg ls names ts = do  res <- sequence $ map (processAgg' names ls) ts
                              let ls' = map show2 ls
@@ -364,25 +364,28 @@ processAgg' :: TableNames -> [Args] -> Tab -> Query Reg
 processAgg'  _ [] _ = return empty
 
 -- Se puede seleccionar cualquiera de los atributos que definen la clase
-processAgg' ns ((Field s):xs) t   = do fromRegisterToContext ns $ value t
-                                       tabVals <- askVals
-                                       v <- fromEither $ lookupList tabVals ns s
-                                       let m = singleton s v
-                                       reg <- processAgg' ns xs t
-                                       return $  union m reg
 
 processAgg' ns (All:xs) t = errorPi3
 
 -- Aplicar una función de agregado reduce el árbol a un solo valor
-processAgg' ns ((A2 f):xs) t  = do reg <- processAgg' ns xs t
-                                   v <- evalAgg ns (A2 f) t
-                                   let m = singleton (show f) v
-                                   return $ union m reg
+-- processAgg' ns ((A2 f):xs) t  = do reg <- processAgg' ns xs t
+--                                    v <- evalAgg ns (A2 f) t
+--                                    let m = singleton (show f) v
+--                                    return $ union m reg
 
 
--- El renombramiento es renombrar un atributo
-processAgg' ns ((As s1 s2 ):xs) t   = do reg <- processAgg' ns (s1:xs) t
-                                         return $ updateKey (show2 s1) (show2 s2) reg
+processAgg' ns ((As arg (Field k) ):xs) t   = do reg <- processAgg' ns (arg:xs) t
+                                                 let oldK = show2 arg
+                                                 return $ updateKey oldK k reg
+
+
+processAgg' ns (arg:xs) t   = do fromRegisterToContext ns $ value t
+                                 arg' <- evalAgg ns arg t
+                                 v <- evalIntExp ns arg'
+                                 let m = singleton (show2 arg) v
+                                 reg <- processAgg' ns xs t
+                                 return $  union m reg
+
 
 
 -- Ejecuta la consulta dml
@@ -422,8 +425,7 @@ runQuery'  ((_,Pi unique args):rs) =
                                             if All `elem` args then do collapseContext newTabName names fields
                                                                        distinct unique [newTabName] newFields t
                                             else  do -- Obtener que atributos deben mantenerse en el contexto
-                                                     let fieldInContext = toFieldName2 args
-                                                     tabTypes <- askTypes
+                                                     let fieldInContext = toFieldName2 args                                                     
                                                      collapseContext newTabName names fieldInContext
                                                      distinct unique  [newTabName] newFields t -- Borrar atributos innecesarios
 
@@ -434,12 +436,12 @@ runQuery'  ((_,Pi unique args):rs) =
 
     -- En este caso se uso la claúsula group by
     else   do -- Aplica función processAgg para ejecutar funciones de agregado
-               (fields,tables) <- processAgg args names tables
+               (fields,t) <- processAgg args names tables
                let newTabName = foldl (++) "" names
                let fieldInContext = toFieldName2 args
                updateFieldsInContext newTabName args
                collapseContext newTabName names fieldInContext
-               distinct unique [newTabName] fields tables
+               distinct unique [newTabName] fields t
 
 
 
@@ -594,7 +596,10 @@ prod (s:xs) = do  (n,fs,t) <- prod' s
                   sequence $ map (\f -> updateFieldsInContext' n f (n//f)) fs
                   t' <- ioEitherMapT (\reg -> return $ funMap n fs reg) t
                   let fs'' = fs'++fs2
-                  return (n:ns,fs'',prod'' fs'' t' t2)
+                  let t'' = prod'' fs'' t' t2
+                  tabTypes <- askTypes
+                  fromIO $ put $ show tabTypes
+                  return (n:ns,fs'',t'')
       where  funMap n fs reg = foldl union emptyHM $ map (\f -> singleton (n//f) (reg ! f)) fs
 
 
@@ -632,7 +637,7 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
                                                                                           evalBoolExp tabNames'  exp) t
                                                          let [n1,n2] = ns
                                                          let nn = intercalate "Join" ns
-                                                         joinContext nn n1 n2
+                                                         collapseContext nn ns fs
                                                          return (nn,fs,t')
 
                                             --JLeft -> retOk $ (g',groupBym,table:names,mapT f t3)
@@ -666,7 +671,7 @@ prod' (Field n) = do e <- askEnv
 
 -- Producto cartesiano (segundo nivel),realiza el producto entre 2 tablas
 prod'' :: FieldNames -> Tab -> Tab -> Tab
-prod'' _ E t = t
+prod'' _ E _ = E
 prod'' _ t E = t
 prod'' fields t1 t2 = let (tl,tr) = prod'' fields (left t1) t2 ||| prod'' fields (right t1) t2
                           t = mergeT (comp fields) tl tr
@@ -677,31 +682,31 @@ prod'' fields t1 t2 = let (tl,tr) = prod'' fields (left t1) t2 ||| prod'' fields
 
 
 -- Remplaza funciones de agregado por los valores correspondientes en una expresión boleana (primer nivel)
-replaceAgg ::FieldNames -> BoolExp -> AVL (HashMap String Args) -> Query BoolExp
-replaceAgg  names (And e1 e2) t = replaceAgg'  names e1 e2 t (\x y -> And x y)
-replaceAgg  names (Or e1 e2) t = replaceAgg'  names  e1 e2 t (\x y -> Or x y)
-replaceAgg  names (Less e1 e2) t = replaceAgg''  names e1 e2 t (\x y -> Less x y)
-replaceAgg  names (Great e1 e2) t = replaceAgg''  names e1 e2 t (\x y -> Great x y)
-replaceAgg  names (Equal e1 e2) t = replaceAgg''  names e1 e2 t (\x y -> Equal x y)
+replaceAgg ::TableNames -> BoolExp -> AVL (HashMap String Args) -> Query BoolExp
+replaceAgg  ts (And e1 e2) t = replaceAgg'  ts e1 e2 t And
+replaceAgg  ts (Or e1 e2) t = replaceAgg'  ts  e1 e2 t Or
+replaceAgg  ts (Less e1 e2) t = replaceAgg''  ts e1 e2 t Less
+replaceAgg  ts (Great e1 e2) t = replaceAgg''  ts e1 e2 t Great
+replaceAgg  ts (Equal e1 e2) t = replaceAgg''  ts e1 e2 t Equal
 replaceAgg _ exp _ = retOk exp
 
 
 -- replace (sedundo nivel)
-replaceAgg'  names e1 e2 t f  =  do e1'<- replaceAgg  names e1 t
-                                    e2' <- replaceAgg  names e2 t
-                                    return $ f e1' e2'
+replaceAgg'  ts e1 e2 t f  =  do e1'<- replaceAgg  ts e1 t
+                                 e2' <- replaceAgg  ts e2 t
+                                 return $ f e1' e2'
 
 
 -- replace (tercer nivel)
-replaceAgg''  names e1 e2 t f  = do e1' <- evalAgg  names e1 t
-                                    e2' <- evalAgg  names e2 t
-                                    return $  f e1' e2'
+replaceAgg''  ts e1 e2 t f  = do e1' <- evalAgg  ts e1 t
+                                 e2' <- evalAgg  ts e2 t
+                                 return $  f e1' e2'
 
 
 
 
--- Evaluar funciones de agregado en el contexto g (primer nivel)
-evalAgg :: FieldNames -> Args -> Tab -> Query Args
+-- Evaluar solo funciones de agregado
+evalAgg :: TableNames -> Args -> Tab -> Query Args
 evalAgg  ns (A2 f) t = do v <-  evalAgg'  ns f t
                           return $  A4 v
 evalAgg  ns (Plus exp1 exp2) t = applyAggregate  ns exp1 exp2 Plus t
@@ -797,9 +802,9 @@ group ts  xs t = do  let reg = value t
 -- Evals
 
 
--- Evaluar expresión entera (primer nivel)
+-- Evaluar args
 evalIntExp :: TableNames -> Args -> Query Args
-evalIntExp  s (Plus exp1 exp2) = evalIntExp' False (+) s exp1 exp2
+evalIntExp  s (Plus exp1 exp2) = evalIntExp'  False (+) s exp1 exp2
 evalIntExp s (Minus exp1 exp2) = evalIntExp' False (-) s exp1 exp2
 evalIntExp  s (Times exp1 exp2) = evalIntExp' False (*)  s exp1 exp2
 evalIntExp  s (Div exp1 exp2) = evalIntExp' True (/)  s exp1 exp2
@@ -807,7 +812,6 @@ evalIntExp  s (Div exp1 exp2) = evalIntExp' True (/)  s exp1 exp2
 evalIntExp  s (Negate exp1) = do n <- evalIntExp  s exp1
                                  return $ (A4 $ negate (toFloat n))
 
-evalIntExp  s (Brack exp1) = evalIntExp  s exp1
 
 
 evalIntExp  s (Field v) = do vals <- askVals
@@ -820,7 +824,7 @@ evalIntExp  s (Dot s2 v) = do vals <-  askVals
 -- Constante
 evalIntExp  _ arg = return arg
 
--- Evaluar expresión entera (segundo nivel)
+-- Evaluar expresión numérica
 -- Incluye un booleano para saber si la operación es una división
 evalIntExp' :: Bool -> (Float -> Float -> Float) ->TableNames -> Args -> Args -> Query Args
 evalIntExp' b o s exp1 exp2 = if b then do n2 <- evalIntExp s exp2

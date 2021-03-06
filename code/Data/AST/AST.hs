@@ -71,8 +71,9 @@ updateFieldsInContext _  [] = return ""
 
 updateFieldsInContext n  (All : xs) = updateFieldsInContext n xs
 
-updateFieldsInContext n  ((As arg (Field v)) : xs) = do  k <- updateFieldsInContext n (arg:xs)
+updateFieldsInContext n  ((As arg (Field v)) : xs) = do  k <- updateFieldsInContext n [arg]
                                                          updateFieldsInContext' n k v
+                                                         updateFieldsInContext n xs
                                                          return v
 
 
@@ -84,17 +85,18 @@ updateFieldsInContext n  ((Dot t v):xs) =   do updateFieldsInContext n xs
                                                return $ t//v
 
 -- Agregar campo con función de agregado
-updateFieldsInContext n (a@(A2 f):xs) = let field =  n //  show2 a in
-                                         do  Q(\c -> do let tabVals = snd' c
-                                                        let tabTypes = trd' c
-                                                        let newVals = HM.singleton field  Nulo `HM.union` (tabVals HM.! n)
-                                                        let newTypes = HM.singleton field Float `HM.union` (tabTypes HM.! n)
-                                                        let tabVals' =  HM.singleton n newVals  `HM.union` tabVals
-                                                        let tabTypes' = HM.singleton n newTypes `HM.union` tabTypes
-                                                        let c' = (fst' c,tabVals', tabTypes')
-                                                        return $ Right (c',field))
-                                             updateFieldsInContext n xs
-                                             return field
+updateFieldsInContext n (arg:xs) = let field =  n //  show2 arg in
+                                       do  Q(\c -> do let tabVals = snd' c
+                                                      let tabTypes = trd' c
+                                                      let newVals = HM.singleton field  Nulo `HM.union` ( tabVals !!!  n)
+                                                      let newTypes = HM.singleton field Float `HM.union` (tabTypes !!! n)
+                                                      let tabVals' =  HM.singleton n newVals  `HM.union` tabVals
+                                                      let tabTypes' = HM.singleton n newTypes `HM.union` tabTypes
+                                                      let c' = (fst' c,tabVals', tabTypes')
+                                                      return $ Right (c',field))
+                                           updateFieldsInContext n xs
+                                           return field
+
 
 
 updateFieldsInContext n (arg : xs) = updateFieldsInContext n xs
@@ -108,16 +110,16 @@ updateFieldsInContext n (arg : xs) = updateFieldsInContext n xs
 
 
 updateFieldsInContext' :: TableName -> FieldName -> FieldName -> Query ()
-updateFieldsInContext' n v1 v2 = Q(\c -> let vals = updateKey v1 v2 $ snd' c HM.! n
-                                             types = updateKey v1 v2 $ trd' c HM.! n
+updateFieldsInContext' n v1 v2 = Q(\c -> let vals = updateKey v1 v2 $ snd' c !!! n
+                                             types = updateKey v1 v2 $ trd' c !!! n
                                              tabVals =  HM.singleton n vals `HM.union` snd' c
                                              tabTypes = HM.singleton n types `HM.union` trd' c
                                          in return $ Right ((fst' c, tabVals,tabTypes),()))
 
 
 -- Actualiza el valor de la llave en m
-updateKey  ::  (Eq k, Hashable k) => k -> k -> HM.HashMap k v -> HM.HashMap k v
-updateKey oldKey newKey m = deleteHM oldKey $ insertHM newKey (m HM.! oldKey) m
+updateKey  :: FieldName -> FieldName -> HM.HashMap FieldName v -> HM.HashMap FieldName v
+updateKey oldKey newKey m = deleteHM oldKey $ insertHM newKey (m !!! oldKey) m
 
 
 -- Unificar los valores del contexto de las tablas ts
@@ -138,7 +140,7 @@ recoverFromContext ts (f:fs) c = do x <- lookupList c ts f
                                     xs <- recoverFromContext ts fs c
                                     return $ HM.singleton f x `HM.union` xs
 
- where funFilter t fs k _ = if k  `elem`  fs || k `elem` map (\f -> t++f) fs then True
+ where funFilter t fs k _ = if k  `elem`  fs || k `elem` map (\f -> t//f) fs then True
                             else False
 
 
@@ -152,7 +154,7 @@ fromRegisterToContext ts reg = Q(\c -> let tabVals = snd' c
                                        in return $ Right (c',()))
    where mapFun ts reg t vals = if t `elem` ts then  HM.mapWithKey (mapFun' reg) vals
                                 else vals
-         mapFun' reg k v  = if k `HM.member` reg then reg HM.! k
+         mapFun' reg k v  = if k `HM.member` reg then reg !!! k
                             else v
 
 
@@ -550,7 +552,7 @@ show2 (Nulo) = "Null"
 
 instance Show Aggregate where
   show (Min _ s) = "Min("++ (show2 s) ++ ")"
-  show (Max _ s) = "Max " ++ (show2 s)
+  show (Max _ s) = "Max(" ++ (show2 s) ++ ")"
   show (Sum _ s) = "Sum(" ++ (show2 s) ++")"
   show (Count _ s) = "Count(" ++ (show2 s) ++")"
   show (Avg _ s) = "Avg(" ++ (show2 s) ++")"
@@ -617,7 +619,9 @@ printTable print s t =
                     sequence_ $ mapT (\ x -> putStrLn $ fold $ map (f' x) s) t
  where fold s = txt 0 s 30
        f x y = x ++ "|" ++ y
-       f' x v =  print $ x HM.! v
+       f' reg y =  print $ case  y `HM.lookup` reg of
+                            Just v -> v
+                            Nothing -> error $ "Error fatal buscando " ++  y
        txt _ [] _ = ""
        txt 0 (x:xs) n  = "|" ++ x ++  txt (n - length x) xs n
        txt c v n = " " ++ txt (c-1) v n
@@ -638,6 +642,7 @@ max3 v1 v2 v3 = max v3 (max v1 v2)
 toFloat :: Args -> Float
 toFloat (A3 n) = fromIntegral n
 toFloat (A4 n) = n
+toFloat arg = error $ show arg
 
 
 retHeadOrNull :: [AVL a] -> AVL a
@@ -654,13 +659,13 @@ giveMeTableNames :: Query TableNames
 giveMeTableNames = Q(\c -> return $ Right (c,HM.keys $ trd' c))
 
 -- Unir los contextos de 2 tablas  en una sola
-joinContext:: TableName -> TableName -> TableName -> Query ()
-joinContext nk k1 k2 = Q(\c -> return $ Right ((fst' c,joinContext' nk k1 k2 $ snd' c,joinContext' nk k1 k2 $ trd' c),()))
-
-joinContext' :: TableName -> TableName -> TableName -> HM.HashMap TableName (HM.HashMap FieldName a) -> HM.HashMap TableName (HM.HashMap FieldName a)
-joinContext' nk k1 k2 vals = let newV = (vals HM.! k1) `HM.union` (vals HM.! k2)
-                                 vals' = HM.delete k1  $ HM.delete k2 vals
-                             in vals' `HM.union` HM.singleton nk newV
+-- joinContext:: TableName -> TableName -> TableName -> Query ()
+-- joinContext nk k1 k2 = Q(\c -> return $ Right ((fst' c,joinContext' nk k1 k2 $ snd' c,joinContext' nk k1 k2 $ trd' c),()))
+--
+-- joinContext' :: TableName -> TableName -> TableName -> HM.HashMap TableName (HM.HashMap FieldName a) -> HM.HashMap TableName (HM.HashMap FieldName a)
+-- joinContext' nk k1 k2 vals = let newV = (vals HM.! k1) `HM.union` (vals HM.! k2)
+--                                  vals' = HM.delete k1  $ HM.delete k2 vals
+--                              in vals' `HM.union` HM.singleton nk newV
 
 -- Realiza una busqueda  para encontrar el valor de un atributo a partir de una lista de tablas y
 lookupList ::ContextFun b -> TableNames -> FieldName -> Either ErrorMsg b
@@ -693,3 +698,8 @@ errorFind2 s = Left $ "La tabla " ++ s  ++ " es desconocida "
 
 (//):: TableName -> FieldName -> FieldName
 (//) t f = t ++ "." ++ f
+
+(!!!) :: HM.HashMap String a -> String -> a
+(!!!) tab k = case  k `HM.lookup` tab of
+                Just v -> v
+                Nothing -> error $ "Error fatal buscando " ++ k
