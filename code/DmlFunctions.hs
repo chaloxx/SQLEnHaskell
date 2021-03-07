@@ -12,19 +12,20 @@ import DynGhc
 import Avl hiding (singleton,All)
 import Data.Char
 import Data.Maybe
-import Prelude hiding (lookup,print,fail)
+import Prelude hiding (fail,lookup,filter,lookup,print)
 import Data.HashMap.Strict hiding (foldr,map,size,null)
 import Control.DeepSeq
 import Error
 import Data.Either
 import Data.List (intersect,(\\),partition,isPrefixOf,intercalate)
+import Data.List.Unique (uniq,repeated)
 import qualified Data.Set as S (fromList,isSubsetOf,intersection,empty,difference)
 import Data.Hashable
 import COrdering (COrdering (..))
 import Parsing (parse,sepBy,char,identifier)
 import Check
 import Control.Monad (when)
-import Prelude hiding (fail,lookup)
+
 
 -- Modulo de funciones dml
 
@@ -426,7 +427,6 @@ runQuery'  ((_,Pi unique args):rs) =
                                                                        distinct unique [newTabName] newFields t
                                             else  do -- Obtener que atributos deben mantenerse en el contexto
                                                      let fieldInContext = toFieldName2 args
-                                                     fromIO $ put $ show fieldInContext
                                                      collapseContext newTabName names fieldInContext
                                                      distinct unique  [newTabName] newFields t -- Borrar atributos innecesarios
 
@@ -452,7 +452,7 @@ runQuery'  ((_,Pi unique args):rs) =
 
         toFieldName2 [] = []
         toFieldName2 (Field v : xs) = v : toFieldName2 xs
-        toFieldName2 ((Dot t v): xs) = (t//v) : toFieldName2 xs
+        toFieldName2 ((Dot _ v): xs) = v : toFieldName2 xs
         toFieldName2 ((As _ (Field v)):xs) =  v : toFieldName2 xs
         toFieldName2 (arg:xs) =  show2 arg : toFieldName2 xs
 
@@ -468,8 +468,38 @@ runQuery'  ((_,Pi unique args):rs) =
 
 -- Ejecuta producto cartesiano
 runQuery' ((_,Prod args):xs) =
-     do     (names,fields,t) <-  prod args
-            return $  (False,names,fields,[t])
+     do     (names,fields,ts) <-  prod args
+            -- Que atributos tienen mismo nombre
+            let commonFields = repeated fields
+            -- Que tablas tienen mismos atributos
+            tabVals <- askVals
+            tablesToChange <- fromEither $ filterTables tabVals names commonFields
+            let index = map  (\n -> dlElemIndex n names) tablesToChange
+            -- Cambiar nombre de atributos en tablas y contexto
+            tsAndFs <- sequence $ map (\i -> changeTable (names!!i) (ts!!i) commonFields) index
+            let (ts',fs) = unzip tsAndFs
+            let tsWithIndex = zip index ts'
+            -- Tablas finales
+            let funMap2 n  = let i = dlElemIndex n names
+                             in if i `elem` index then dlLookup i tsWithIndex
+                                else ts !! i
+            let ts'' = map funMap2 names
+            -- Producto entre todas las tablas
+            (fs',t) <- cartesianProd $ zip names ts''
+            return (False,names,fs',[t])
+
+
+      where changeTable n t cf = do fs <- fieldsOfTable n
+                                    let cf' = dlFilter (\c -> c `elem` fs) cf
+                                    let t' =  mapT (funMap n cf') t
+                                    sequence $ map (\f -> updateFieldsInContext' n f (n//f)) cf'
+                                    let newFields = map (n//) cf'
+                                    return (t',newFields)
+
+            funMap n fs reg = let newReg = unions $ map (\f -> singleton (n//f) (reg!f)) fs
+                                  oldReg = filterWithKey (\k v -> not $ elem k fs) reg
+                              in union newReg oldReg
+
 
 
 
@@ -583,23 +613,14 @@ runQuery'' g a1 a2 xs op =
 
 
 
--- Producto cartesiano (primer nivel)
-prod :: [Args] -> Query (TableNames,FieldNames,Tab)
-prod [] = return ([],[],emptyT)
-
-
-
-
+-- Recupera tablas (primer nivel)
+prod :: [Args] -> Query (TableNames,FieldNames,[Tab])
+prod [] = return ([],[],[])
 
 prod (s:xs) = do  (n,fs,t) <- prod' s
-                  (ns,fs2,t2) <- prod xs
-                  let fs' = map (\f-> n//f) fs
-                  sequence $ map (\f -> updateFieldsInContext' n f (n//f)) fs
-                  t' <- ioEitherMapT (\reg -> return $ funMap n fs reg) t
-                  let fs'' = fs'++fs2
-                  let t'' = prod'' fs'' t' t2
-                  return (n:ns,fs'',t'')
-      where  funMap n fs reg = foldl union emptyHM $ map (\f -> singleton (n//f) (reg ! f)) fs
+                  (ns,fs2,ts) <- prod xs
+                  return (n:ns,fs++fs2,t:ts)
+
 
 
 
@@ -624,7 +645,7 @@ prod' (Subquery s) = let c = conversion s
 
 
 prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
-                                  (ns,fs,t) <- prod ts
+                                  (_,ns,fs,[t]) <- runQuery' [(1,Prod ts)]
                                   if length ns /= 2 then retFail "Error en join"
                                   else do tabTypes <- askTypes
                                           tabNames <- giveMeTableNames
@@ -635,8 +656,9 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
                                                                                           -- Evaluar expresión booleana
                                                                                           evalBoolExp tabNames'  exp) t
                                                          let [n1,n2] = ns
-                                                         let nn = intercalate "Join" ns
+                                                         let nn = n1++"Join"++n2
                                                          collapseContext nn ns fs
+                                                         tabVals <- askVals                                                         
                                                          return (nn,fs,t')
 
                                             --JLeft -> retOk $ (g',groupBym,table:names,mapT f t3)
@@ -654,6 +676,7 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
 prod' (As arg (Field n)) = do (n2,scheme,t) <- prod' arg
                               tabVals <- askVals
                               updateKeyContext n2 n
+                              tabVals <- askVals
                               return (n,scheme,t)
 
 -- Tercer caso : Tabla comun
@@ -667,17 +690,21 @@ prod' (Field n) = do e <- askEnv
                          return (n,scheme,t)
 
 
+cartesianProd :: [(TableName,Tab)] -> Query (FieldNames,Tab)
+cartesianProd [] = return ([],emptyT)
+cartesianProd ((n,t):xs) = do   (fs,t2) <- cartesianProd xs
+                                fields <- fieldsOfTable n
+                                let fs' = fields ++ fs
+                                return (fs',cartesianProd' fs' t t2)
 
--- Producto cartesiano (segundo nivel),realiza el producto entre 2 tablas
-prod'' :: FieldNames -> Tab -> Tab -> Tab
-prod'' _ E _ = E
-prod'' _ t E = t
-prod'' fields t1 t2 = let (tl,tr) = prod'' fields (left t1) t2 ||| prod'' fields (right t1) t2
-                          t = mergeT (comp fields) tl tr
-                      in mergeT (comp fields) t (prod''' (value t1) t2)
-  where prod''' x t = mapT (union x) t
-
-
+-- Producto cartesiano (segundo nivel)
+cartesianProd' :: FieldNames -> Tab -> Tab -> Tab
+cartesianProd' _ E _ = E
+cartesianProd' _ t E = t
+cartesianProd' fields t1 t2 = let (tl,tr) = cartesianProd' fields (left t1) t2 ||| cartesianProd' fields (right t1) t2
+                                  t = mergeT (comp fields) tl tr
+                              in mergeT (comp fields) t (cartesianProd'' (value t1) t2)
+  where cartesianProd'' x t = mapT (union x) t
 
 
 -- Remplaza funciones de agregado por los valores correspondientes en una expresión boleana (primer nivel)

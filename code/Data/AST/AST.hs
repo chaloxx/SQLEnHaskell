@@ -6,6 +6,7 @@ import Data.Hashable
 import Data.Typeable (TypeRep)
 import System.Console.Terminal.Size  (size,width)
 import Data.List.Split
+import qualified Data.List as DL (lookup,elemIndex,intersect,filter)
 import Control.Applicative
 
 
@@ -130,6 +131,8 @@ collapseContext t ts fs = do  tabTypes <- askTypes
                               let newVals = HM.singleton t $ HM.fromList $ map (\f -> (f,Nulo)) fs
                               Q(\c -> let c' = (fst' c,newVals `HM.union` (snd' c),newTypes `HM.union` (trd' c))
                                       in return $ Right (c',()))
+                              if ts == [t] then return ()
+                              else deleteFromContext ts
 
 
 
@@ -171,6 +174,11 @@ deleteFromContext' :: TableNames -> ContextFun a -> ContextFun a
 deleteFromContext' ts cf = HM.filterWithKey (funFilter ts) cf
  where funFilter ts k _ = if k `elem` ts then False
                           else True
+
+
+fieldsOfTable :: TableName -> Query FieldNames
+fieldsOfTable n = Q(\c -> let keys = HM.keys $  (snd' c) HM.! n
+                          in return $ Right (c,keys))
 
 
 
@@ -690,6 +698,17 @@ lookupList' g q@(y:ys) v = case HM.lookup y g of
                                          Nothing -> lookupList' g ys v
                                          Just x' -> return (field,x')
 
+-- Devuelve que tablas tienen alguno de los atributos fs
+filterTables ::Show b => ContextFun b -> TableNames -> FieldNames -> Either ErrorMsg TableNames
+filterTables _ [] _ = return []
+filterTables g (y:ys) fs = case HM.lookup y g of
+                             Nothing -> errorFind2 y
+                             Just r -> do xs <- filterTables g ys fs
+                                          let keys = HM.keys r
+                                          return $ case DL.intersect keys fs of
+                                                     [] -> xs
+                                                     _ -> y:xs
+
 
 errorFind s = Left $ "No se pudo encontrar el atributo " ++ s
 errorFind2 s = Left $ "La tabla " ++ s  ++ " es desconocida "
@@ -703,3 +722,14 @@ errorFind2 s = Left $ "La tabla " ++ s  ++ " es desconocida "
 (!!!) tab k = case  k `HM.lookup` tab of
                 Just v -> v
                 Nothing -> error $ "Error fatal buscando " ++ k
+
+dlLookup :: Int -> [(Int,a)] -> a
+dlLookup i ls = case DL.lookup i ls of
+                 Just x -> x
+                 Nothing -> error "Error fatal"
+dlElemIndex ::Eq a => a -> [a] -> Int
+dlElemIndex x ls = case DL.elemIndex x ls of
+                     Just i -> i
+                     Nothing -> error "Error fatal"
+
+dlFilter = DL.filter

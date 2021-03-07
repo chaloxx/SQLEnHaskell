@@ -14,9 +14,10 @@ WHERE Persona.codigo = PoseeInmueble.codigoProp;
 /*b*/
 /*códigos de los inmuebles cuyo precio está en el intervalo 600.000 a 700.000
 inclusive.*/
+
 /*
 SELECT codigo
-FROM Inmueble
+FROM Inmueble AS I
 WHERE precio >= 600000 AND precio <= 800000
 ORDER BY codigo ASC;
 */
@@ -28,17 +29,15 @@ FROM Persona,PrefiereZona AS PZ
 WHERE EXISTS( SELECT ALL FROM PrefiereZona WHERE  nombreZ = "Norte" AND nombreP = "Santa Fe" AND codigo = codigoCliente)
       AND
       NOT  EXISTS (SELECT ALL FROM PrefiereZona WHERE  (nombreZ <> "Norte" OR nombreP <> "Santa Fe") AND codigo = codigoCliente )
-  */
-
+*/
 /*d*/
-
 /*
 SELECT DISTINCT nombre
-FROM Persona INNER JOIN (SELECT vendedor FROM (SELECT codigo AS cod FROM Persona JOIN PrefiereZona ON codigo = codigoCliente WHERE nombreP = "Rosario" AND nombreZ = "Centro") AS s1 JOIN Cliente ON s1.cod = Cliente.codigo ) AS s2
+FROM Persona AS p INNER JOIN (SELECT vendedor FROM (SELECT codigo AS cod FROM Persona JOIN PrefiereZona ON codigo = codigoCliente WHERE nombreP = "Rosario" AND nombreZ = "Centro") AS s1 JOIN Cliente ON s1.cod = Cliente.codigo ) AS s2
              ON vendedor = codigo
 */
 
-SELECT Persona.codigo  FROM Persona JOIN PrefiereZona ON codigo = codigoCliente 
+
 
 /*e*/
 /*SELECT nombre FROM Persona JOIN (SELECT vendedor FROM Cliente AS C WHERE codigo IN (SELECT vendedor FROM Cliente)) AS s1 ON codigo = vendedor*/
@@ -97,13 +96,17 @@ WHERE  Persona.codigo = PZ.codigoCliente AND
        Inmueble.nombreP = Limita.nombreP AND
        Inmueble.nombreZ = Limita.nombreZ) AND
        Persona.codigo IN (1001,1011,1013)*/
-       /*(SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
-                                                     WHERE Cliente.codigo = PZ2.codigoCliente AND
-                                                          I2.nombreP = PZ2.nombreP AND
-                                                          I2.nombreZ = PZ2.nombreZ AND
-                                                          NOT EXISTS (SELECT ALL FROM Visitas WHERE
-                                                                      Visitas.codigoCliente = Cliente.codigo AND
-                                                                      Visitas.codigoInmueble = I2.codigo)));
+
+
+/*Esta subconsulta devulve 1001,1011 y 1013 si en vez de poner los valores pongo la subconsulta no termina más*/
+/*
+SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
+                                             WHERE Cliente.codigo = PZ2.codigoCliente AND
+                                                  I2.nombreP = PZ2.nombreP AND
+                                                  I2.nombreZ = PZ2.nombreZ AND
+                                                  NOT EXISTS (SELECT ALL FROM Visitas WHERE
+                                                              Visitas.codigoCliente = Cliente.codigo AND
+                                                              Visitas.codigoInmueble = I2.codigo));
 */
 
 /*
@@ -137,7 +140,7 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
 /*SELECT MIN(precio) AS min, MIN(precio)/3 AS minDiv3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
 /*SELECT MIN(precio) , MIN(precio)/3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
 /*SELECT max,maxDiv3 FROM SELECT MAX(precio) AS max , MAX(precio)/3 AS maxDiv3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT COUNT(direccion) AS count AS total FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
+SELECT COUNT(direccion) AS count AS total FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0
 
 
 
