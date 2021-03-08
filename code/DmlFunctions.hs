@@ -658,7 +658,7 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
                                                          let [n1,n2] = ns
                                                          let nn = n1++"Join"++n2
                                                          collapseContext nn ns fs
-                                                         tabVals <- askVals                                                         
+                                                         tabVals <- askVals
                                                          return (nn,fs,t')
 
                                             --JLeft -> retOk $ (g',groupBym,table:names,mapT f t3)
@@ -927,9 +927,9 @@ evalBoolExp s (InQuery arg dml) = do tabTypes <- askTypes
 
 
 evalBoolExp s (Like f p) = do tabTypes <- askTypes
-                              vals <- askVals
+                              tabVals <- askVals
                               t <- fromEither $ checkTypeExp s tabTypes f
-                              if t == String then let (A1 v) = obtainValue s f vals in
+                              if t == String then let (A1 v) = obtainValue s f tabVals in
                                                   return $ findPattern v p
                               else errorLike
 

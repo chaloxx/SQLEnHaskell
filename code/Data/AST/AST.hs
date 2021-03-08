@@ -693,10 +693,13 @@ lookupList' ::Show b => ContextFun b -> TableNames -> FieldName -> Either ErrorM
 lookupList' _ [] v = errorFind v
 lookupList' g q@(y:ys) v = case HM.lookup y g of
                            Nothing -> errorFind2 y
-                           Just r -> let field = y//v in
-                                      case HM.lookup field r of
-                                         Nothing -> lookupList' g ys v
-                                         Just x' -> return (field,x')
+                           Just r -> case HM.lookup v r of
+                                      Just x' -> return (v,x')
+                                      Nothing ->  let field = y//v in
+                                                    case HM.lookup field r of
+                                                      Just x -> return (field,x)
+                                                      Nothing -> lookupList' g ys v
+
 
 -- Devuelve que tablas tienen alguno de los atributos fs
 filterTables ::Show b => ContextFun b -> TableNames -> FieldNames -> Either ErrorMsg TableNames
