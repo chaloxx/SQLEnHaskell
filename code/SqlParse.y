@@ -628,7 +628,7 @@ lexNum cont xs =  \(s1,s2) -> cont val r (s1,s2 + (dif xs r) )
 
 
 lexField cont xs = \(s1,s2) -> cont (TField s) r (s1,s2 + (length s))
-  where [(s,r)] = parse (many alphanum) xs
+  where [(s,r)] = parse (many (do alphanum <|> char '_')) xs
 
 
 lexString cont  xs = \(s1,s2) -> cont (TStr s) r (s1,s2 + (length s))

@@ -438,7 +438,7 @@ data Args = A1 String
           | Negate Args
           | Brack Args
           | Join JOINS Args Args BoolExp
-          deriving (Eq,Show,Ord)
+          deriving (Eq,Show)
 
 
 
@@ -466,7 +466,6 @@ data BoolExp =  And BoolExp BoolExp
               | InVals Args [Args]
               | InQuery Args DML
               | Like Args String
-              deriving (Eq,Ord,Show)
 
 
 
@@ -565,20 +564,20 @@ instance Show Aggregate where
   show (Count _ s) = "Count(" ++ (show2 s) ++")"
   show (Avg _ s) = "Avg(" ++ (show2 s) ++")"
 
---
--- instance Show BoolExp where
---   show (Not e) = "NOT (" ++ (show e) ++ ")"
---   show (And e1 e2) = (show e1) ++ " AND " ++ (show e2)
---   show (Or e1 e2) = (show e1) ++ " OR " ++ (show e2)
---   show (Equal e1 e2) = (show e1) ++ " = " ++ (show e2)
---   show (Less e1 e2) = (show e1) ++ " < " ++ (show e2)
---   show (Great e1 e2) = (show e1) ++ " > " ++ (show e2)
---   show (GEqual e1 e2) = (show e1) ++ " >= " ++ (show e2)
---   show (LEqual e1 e2) = (show e1) ++ " <= " ++ (show e2)
---   show (Exist dml) =      "EXISTS (" ++ show dml ++ ")"
---   show (NEqual exp1 exp2) =      show exp1 ++ " <> " ++ show exp2
---   show (InVals f dml) = (show f) ++ " IN " ++ (show dml)
---   show (InQuery f ls) = (show f) ++ " IN " ++ (show ls)
+
+instance Show BoolExp where
+  show (Not e) = "NOT (" ++ (show e) ++ ")"
+  show (And e1 e2) = (show e1) ++ " AND " ++ (show e2)
+  show (Or e1 e2) = (show e1) ++ " OR " ++ (show e2)
+  show (Equal e1 e2) = (show e1) ++ " = " ++ (show e2)
+  show (Less e1 e2) = (show e1) ++ " < " ++ (show e2)
+  show (Great e1 e2) = (show e1) ++ " > " ++ (show e2)
+  show (GEqual e1 e2) = (show e1) ++ " >= " ++ (show e2)
+  show (LEqual e1 e2) = (show e1) ++ " <= " ++ (show e2)
+  show (Exist dml) =      "EXISTS (" ++ show dml ++ ")"
+  show (NEqual exp1 exp2) =      show exp1 ++ " <> " ++ show exp2
+  show (InVals f dml) = (show f) ++ " IN " ++ (show dml)
+  show (InQuery f ls) = (show f) ++ " IN " ++ (show ls)
 
 
 
@@ -711,6 +710,10 @@ filterTables g (y:ys) fs = case HM.lookup y g of
                                           return $ case DL.intersect keys fs of
                                                      [] -> xs
                                                      _ -> y:xs
+
+emptyContext :: Query ()
+emptyContext = Q(\c -> let c'= (fst' c, emptyHM,emptyHM)
+                       in return $ Right (c',()))
 
 
 errorFind s = Left $ "No se pudo encontrar el atributo " ++ s

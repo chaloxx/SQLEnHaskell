@@ -6,20 +6,19 @@ DROP ALL TABLE;
 
 
 CREATE TABLE Poblacion(
-  nombrePoblacion  String,
-  nHabitantes      Int NULL,
-  KEY (nombrePoblacion)
+  nombre_poblacion  String,
+  n_habitantes      Int NULL,
+  KEY (nombre_poblacion)
 );
 
 
 
 
-
 CREATE TABLE Zona(
-  nombrePoblacion  String,
-  nombreZona       String,
-  KEY (nombreZona, nombrePoblacion),
-  FOREIGN KEY (nombrePoblacion) REFERENCE Poblacion (nombrePoblacion) ON DELETE CASCADE ON UPDATE CASCADE
+  nombre_poblacion  String,
+  nombre_zona       String,
+  KEY (nombre_zona, nombre_poblacion),
+  FOREIGN KEY (nombre_poblacion) REFERENCE Poblacion (nombre_poblacion) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 
@@ -30,23 +29,23 @@ CREATE TABLE Inmueble (
   precio            Int,
   direccion         String,
   superficie        Int,
-  nombreP  String,
-  nombreZ       String,
+  nombre_poblacion  String,
+  nombre_zona       String,
   KEY (codigo),
-  FOREIGN KEY (nombreZ,nombreP) REFERENCE Zona (nombreZona,nombrePoblacion) ON DELETE CASCADE ON UPDATE CASCADE
+  FOREIGN KEY (nombre_zona,nombre_poblacion) REFERENCE Zona (nombre_zona,nombre_poblacion) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 
 CREATE TABLE Limita (
-  nombreP    String,
-  nombreZ    String ,
-  nombreP2   String ,
-  nombreZ2   String,
-  KEY (nombreP, nombreZ, nombreP2, nombreZ2),
-  FOREIGN KEY (nombreP) REFERENCE Poblacion (nombrePoblacion)  ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (nombreZ) REFERENCE Zona (nombreZona)  ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (nombreP2) REFERENCE Poblacion (nombrePoblacion)  ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (nombreZ2) REFERENCE Zona (nombreZona)  ON DELETE CASCADE ON UPDATE CASCADE
+  nombre_poblacion    String,
+  nombre_zona    String ,
+  nombre_poblacion_2   String ,
+  nombre_zona_2   String,
+  KEY (nombre_poblacion, nombre_zona, nombre_poblacion_2, nombre_zona_2),
+  FOREIGN KEY (nombre_poblacion) REFERENCE Poblacion (nombre_poblacion)  ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (nombre_zona) REFERENCE Zona (nombre_zona)  ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (nombre_poblacion_2) REFERENCE Poblacion (nombre_poblacion)  ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (nombre_zona_2) REFERENCE Zona (nombre_zona)  ON DELETE CASCADE ON UPDATE CASCADE
 ) ;
 
 
@@ -79,10 +78,10 @@ CREATE TABLE Cliente (
 
 
 CREATE TABLE Propietario (
-  codigoP  Int,
+  codigo  Int,
   dni     Int NULL,
-  KEY (codigoP),
-  FOREIGN KEY (codigoP) REFERENCE Persona (codigo) ON DELETE CASCADE ON UPDATE CASCADE
+  KEY (codigo),
+  FOREIGN KEY (codigo) REFERENCE Persona (codigo) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 
@@ -90,32 +89,31 @@ CREATE TABLE Propietario (
 
 
 CREATE TABLE PoseeInmueble (
-  codigoProp  Int,
-  codigoInmueble     String,
-  KEY (codigoProp, codigoInmueble),
-  FOREIGN KEY (codigoProp) REFERENCE Propietario (codigoP) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (codigoInmueble) REFERENCE Inmueble (codigo)   ON DELETE CASCADE ON UPDATE CASCADE
+  codigo_propietario  Int,
+  codigo_inmueble     String,
+  KEY (codigo_propietario, codigo_inmueble),
+  FOREIGN KEY (codigo_propietario) REFERENCE Propietario (codigo) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (codigo_inmueble) REFERENCE Inmueble (codigo)   ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE TABLE PrefiereZona (
-  codigoCliente    Int,
-  nombreP  String,
-  nombreZ  String,
-  KEY (codigoCliente, nombreP, nombreZ),
-  FOREIGN KEY (codigoCliente) REFERENCE Persona (codigo) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (nombreP,nombreZ) REFERENCE Zona (nombrePoblacion,nombreZona) ON DELETE CASCADE ON UPDATE CASCADE
+  codigo_cliente    Int,
+  nombre_poblacion  String,
+  nombre_zona  String,
+  KEY (codigo_cliente, nombre_poblacion, nombre_zona),
+  FOREIGN KEY (codigo_cliente) REFERENCE Persona (codigo) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (nombre_poblacion,nombre_zona) REFERENCE Zona (nombre_poblacion,nombre_zona) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 
 CREATE TABLE Visitas (
-  codigoCliente    Int,
-  codigoInmueble   String,
-  fechaHora  DateTime ,
-  KEY (codigoInmueble, fechaHora),
-  FOREIGN KEY (codigoCliente) REFERENCE Cliente (codigo) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (codigoInmueble) REFERENCE Inmueble (codigo) ON DELETE CASCADE ON UPDATE CASCADE
+  codigo_cliente    Int,
+  codigo_inmueble   String,
+  fecha_hora  DateTime ,
+  KEY (codigo_inmueble, fecha_hora),
+  FOREIGN KEY (codigo_cliente) REFERENCE Cliente (codigo) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (codigo_inmueble) REFERENCE Inmueble (codigo) ON DELETE CASCADE ON UPDATE CASCADE
 );
-
 
 
 INSERT  Poblacion ("Rosario", 1500000);
@@ -175,7 +173,6 @@ INSERT  Persona (1005, "Mirta", "Gonzalez", "Sarmiento 4236, Rosario", 4304935);
 INSERT  Persona (1006, "Laura", "Perez", "Corrientes 4236, Santa Fe", 445935);
 INSERT  Persona (1007, "Luis", "Salazar", "Moreno 236, Casilda", 455935);
 INSERT  Persona (1008, "Maria", "Salazar", "Moreno 236, Casilda", 455935);
-
 INSERT  Persona (1011, "Ana", "Zarantonelli", "Sarmiento 123, Rosario", 4555001);
 INSERT  Persona (1012, "Belen", "Yani", "Avellaneda 234, Rosario", 4555002);
 INSERT  Persona (1013, "Carlos", "Xuan", "Roca 345, San Lorenzo", 4555003);
@@ -184,6 +181,8 @@ INSERT  Persona (1015, "Emilio", "Visconti", "Urquiza 567, Rosario", 4555005);
 INSERT  Persona (1016, "Facundo", "Uriarte", "Alvear 678, Rosario", 4555006);
 INSERT  Persona (1017, "Gabriela", "Troncoso", "Belgrano 789, Santa Fe", 4555007);
 INSERT  Persona (1018, "Hugo", "Sosa", "Saavedra 890, Rosario", 4555008);
+
+
 
 INSERT  Vendedor (1004, "21-12777999-2", 10000);
 INSERT  Vendedor (1005, "21-13777999-2", 10000);
