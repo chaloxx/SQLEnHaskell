@@ -8,13 +8,64 @@ import System.Console.Terminal.Size  (size,width)
 import Data.List.Split
 import qualified Data.List as DL (lookup,elemIndex,intersect,filter)
 import Control.Applicative
-
+import Data.Time
+import Data.Fixed
 
 -- Modulo con árboles de sintaxis abstractas y otras definiciones útiles
 
-data Date = Date {dayD::Int,monthD::Int,yearD::Int} deriving (Ord,Eq,Show)
-data Time = Time {tHour::Int,tMinute::Int,tSecond::Int} deriving (Ord,Eq,Show)
-data DateTime = DateTime {year::Int,month::Int,day::Int,hour::Int,minute::Int,second::Int} deriving (Ord,Eq,Show)
+
+-- Representación de la hora y el día
+
+data Dates = Day {dayD::Int,monthD::Int,yearD::Int} deriving (Eq,Show)
+
+instance Ord Dates where
+  (<) d1 d2 = compareDate d1 d2 (<)
+  (<=) d1 d2 = compareDate d1 d2 (<=)
+  (>) d1 d2 = compareDate d1 d2 (>)
+  (>=) d1 d2 = compareDate d1 d2 (>=)
+  max d1 d2 = if compareDate d1 d2 (>) then d1
+              else d2
+  min d1 d2 = if compareDate d1 d2 (<) then d1
+              else d2
+
+compareDate d1 d2 op = op (fromGregorian (fromIntegral $ yearD d1) (monthD d1) (dayD d1))  (fromGregorian (fromIntegral $ yearD d2) (monthD d2) (dayD d2))
+
+
+
+data Times = T {tHour::Int,tMinute::Int,tSecond::Int} deriving (Eq,Show)
+
+instance Ord Times where
+  (<) t1 t2 = compareTime t1 t2 (<)
+  (<=) t1 t2 = compareTime t1 t2 (<=)
+  (>) t1 t2 = compareTime t1 t2 (>)
+  (>=) t1 t2 = compareTime t1 t2 (>=)
+  max t1 t2 = if compareTime t1 t2 (>) then t1
+              else t2
+  min t1 t2 = if compareTime t1 t2 (<) then t1
+              else t2
+
+
+
+compareTime t1 t2 op = op (TimeOfDay (tHour t1) (tMinute t1) (fromIntegral $ tSecond t1))  (TimeOfDay (tHour t2) (tMinute t2) (fromIntegral $ tSecond t2))
+
+data DateTime = DateTime {year::Int,month::Int,day::Int,hour::Int,minute::Int,second::Int} deriving (Eq,Show)
+
+
+instance Ord DateTime where
+  (<) dt1 dt2 = compareDateTime dt1 dt2 (<)
+  (<=) dt1 dt2 = compareDateTime dt1 dt2 (<=)
+  (>) dt1 dt2 = compareDateTime dt1 dt2 (>)
+  (>=) dt1 dt2 = compareDateTime dt1 dt2 (>=)
+  max dt1 dt2 = if compareDateTime dt1 dt2 (>) then dt1
+              else dt2
+  min dt1 dt2 = if compareDateTime dt1 dt2 (<) then dt1
+              else dt2
+
+
+compareDateTime dt1 dt2 op = op (LocalTime (fromGregorian (fromIntegral $ year dt1) (month dt1) (day dt1)) (TimeOfDay (hour dt1) (minute dt1) (fromIntegral $ second dt1)))
+                                (LocalTime (fromGregorian (fromIntegral $ year dt2) (month dt2) (day dt2)) (TimeOfDay (hour dt2) (minute dt2) (fromIntegral $ second dt2)))
+
+
 
 newtype Query a = Q {runState::Context -> IO(Either ErrorMsg (Context,a))}
 
@@ -334,7 +385,7 @@ type ForeignKey = [(String,[(String,String)],RefOption,RefOption)]
 type Reference = (String,RefOption,RefOption)
 
 -- Tipos de datos
-data Type = String | Int | Float | Bool | Datetime | Dates | Tim deriving (Show,Eq,Ord)
+data Type = String | Int | Float | Bool | Datetime | Date | Time  deriving (Show,Eq,Ord)
 
 
 -- Resultado del parseo
@@ -423,8 +474,8 @@ data Args = A1 String
           | A3 Int
           | A4 Float
           | A5 DateTime  -- (fecha y hora )
-          | A6 Date  --(solo fecha)
-          | A7 Time -- (solo hora)
+          | A6 Dates  --(solo fecha)
+          | A7 Times -- (solo hora)
           | All
           | Subquery DML
           | As Args Args
@@ -438,7 +489,10 @@ data Args = A1 String
           | Negate Args
           | Brack Args
           | Join JOINS Args Args BoolExp
-          deriving (Eq,Show)
+          deriving (Eq,Show,Ord)
+
+
+
 
 
 
@@ -466,6 +520,7 @@ data BoolExp =  And BoolExp BoolExp
               | InVals Args [Args]
               | InQuery Args DML
               | Like Args String
+              deriving (Eq,Ord)
 
 
 
@@ -538,12 +593,12 @@ show2 (A1 s) = s
 show2 (A2 f) = show f
 show2 (A3 n) = show n
 show2 (A4 f) = show f
-show2 (A5 dt) = (show2 $ A6 $ Date (day dt) (month dt) (year dt)) ++ " " ++ (show2 $ A7 $ Time (hour dt) (minute dt) (second dt))
+show2 (A5 dt) = (show2 $ A6 $ Day (year dt)  (month dt) (day dt) ) ++ " " ++ (show2 $ A7 $ T (hour dt) (minute dt) (second dt))
 show2 (A6 d) = (sh $ yearD d) ++ "-" ++ (sh $ monthD d) ++ "-" ++ (sh $ dayD d)
-    where sh = show
+     where sh = show
 show2 (A7 t) = (sh $ tHour t) ++ ":" ++ (sh $ tMinute t) ++ ":" ++ (sh $ tSecond t)
-   where sh 0 = "00"
-         sh t = show t
+    where sh 0 = "00"
+          sh t = show t
 show2 (Field e) = e
 show2 (As _ s) = show2 s
 show2 (Dot s1 s2) = s1 //s2
@@ -569,11 +624,11 @@ instance Show BoolExp where
   show (Not e) = "NOT (" ++ (show e) ++ ")"
   show (And e1 e2) = (show e1) ++ " AND " ++ (show e2)
   show (Or e1 e2) = (show e1) ++ " OR " ++ (show e2)
-  show (Equal e1 e2) = (show e1) ++ " = " ++ (show e2)
-  show (Less e1 e2) = (show e1) ++ " < " ++ (show e2)
-  show (Great e1 e2) = (show e1) ++ " > " ++ (show e2)
-  show (GEqual e1 e2) = (show e1) ++ " >= " ++ (show e2)
-  show (LEqual e1 e2) = (show e1) ++ " <= " ++ (show e2)
+  show (Equal e1 e2) = (show2 e1) ++ " = " ++ (show2 e2)
+  show (Less e1 e2) = (show2 e1) ++ " < " ++ (show2 e2)
+  show (Great e1 e2) = (show2 e1) ++ " > " ++ (show2 e2)
+  show (GEqual e1 e2) = (show2 e1) ++ " >= " ++ (show2 e2)
+  show (LEqual e1 e2) = (show2 e1) ++ " <= " ++ (show2 e2)
   show (Exist dml) =      "EXISTS (" ++ show dml ++ ")"
   show (NEqual exp1 exp2) =      show exp1 ++ " <> " ++ show exp2
   show (InVals f dml) = (show f) ++ " IN " ++ (show dml)

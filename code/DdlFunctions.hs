@@ -28,7 +28,7 @@ import Control.DeepSeq
 
 code :: String -> TableDescript -> String
 code f (_,_,_,k,_) =   "module " ++ f ++ " where \n" ++
-                       "import AST (Args (..),Type(..),TableInfo(..),Date(..),Time(..),DateTime(..))\n" ++
+                       "import AST (Args (..),Type(..),TableInfo(..),Dates(..),Times(..),DateTime(..))\n" ++
                        "import Data.Typeable\n" ++
                        "import Data.HashMap.Strict hiding (keys) \n" ++
                        "import Avl (AVL(..),m)\n" ++

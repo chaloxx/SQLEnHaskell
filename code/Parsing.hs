@@ -1,11 +1,11 @@
- {-# LANGUAGE NoMonadFailDesugaring #-}
+{-# LANGUAGE NoMonadFailDesugaring #-}
 
  module Parsing where
 
  import Data.Char
  import Control.Monad
  import Control.Applicative hiding (many)
- import AST (DateTime(..),Date(..),Time(..),Args(..))
+ import AST (DateTime(..),Dates(..),Times(..),Args(..))
 
 
 -- Modulo de subparsers útiles para datos específicos
@@ -198,7 +198,7 @@
                    else do char '-'
                            day <- integer
                            if day < 1 || day > 31 then failure
-                           else return $ (A6 $ Date day month year)
+                           else return $ (A6 $ Day day month year)
 
  time :: Parser Args
  time = do hour <- integer
@@ -209,7 +209,7 @@
                    else do char ':'
                            seconds <- integer
                            if seconds < 0 || seconds > 59 then failure
-                           else return $ (A7 $ Time hour minutes seconds)
+                           else return $ (A7 $ T hour minutes seconds)
  number :: Parser Args
  number =  do x <- float
               return $ A4 x

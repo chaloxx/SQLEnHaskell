@@ -33,8 +33,8 @@ typeOfArgs (A1 _) = String
 typeOfArgs (A3 _) = Int
 typeOfArgs (A4 _) = Float
 typeOfArgs (A5 _) = Datetime
-typeOfArgs (A6 _) = Dates
-typeOfArgs (A7 _) = Tim
+typeOfArgs (A6 _) = Date
+typeOfArgs (A7 _) = Time
 
 
 

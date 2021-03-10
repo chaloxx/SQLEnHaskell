@@ -397,8 +397,8 @@ TYPE :: {Type}
      | BOOL     {Bool}
      | STRING   {String}
      | DATETIME {Datetime}
-     | DATE     {Dates}
-     | TIME     {Tim}
+     | DATE     {Date}
+     | TIME     {Time}
 
 
 
@@ -486,8 +486,8 @@ data Token =   TCUser
              | TDate
              | TTime
              | TDatTim DateTime
-             | TDat   Date
-             | TTim Time
+             | TDat   Dates
+             | TTim Times
 
              | TOn
              | TJoin

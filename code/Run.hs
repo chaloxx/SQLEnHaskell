@@ -34,7 +34,7 @@ runSql (S2 cmd) = do runDdl cmd
 runSql (S3 cmd) = do runManUser cmd
                      askEnv
 runSql (Seq cmd1 cmd2) = do runSql cmd1
-                            emptyContext                            
+                            emptyContext
                             runSql cmd2
 runSql (Source p) =  Q(\c ->   let e = fst' c in
                                if ".sql" `isSuffixOf` p then do read e p c `catch` exception p

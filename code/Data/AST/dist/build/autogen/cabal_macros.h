@@ -77,6 +77,17 @@
   (major1) == 0 && (major2) == 3 && (minor) <= 2)
 #endif /* MIN_VERSION_terminal_size */
 
+/* package time-1.11.1.1 */
+#ifndef VERSION_time
+#define VERSION_time "1.11.1.1"
+#endif /* VERSION_time */
+#ifndef MIN_VERSION_time
+#define MIN_VERSION_time(major1,major2,minor) (\
+  (major1) <  1 || \
+  (major1) == 1 && (major2) <  11 || \
+  (major1) == 1 && (major2) == 11 && (minor) <= 1)
+#endif /* MIN_VERSION_time */
+
 /* package unordered-containers-0.2.10.0 */
 #ifndef VERSION_unordered_containers
 #define VERSION_unordered_containers "0.2.10.0"
@@ -221,10 +232,10 @@
 #endif /* MIN_TOOL_VERSION_strip */
 
 #ifndef CURRENT_PACKAGE_KEY
-#define CURRENT_PACKAGE_KEY "AST-0.1.0.0-HnUGpkWgT633dYooFIiK2e"
+#define CURRENT_PACKAGE_KEY "AST-0.1.0.0-KSFYYNus19tAqLao65OqeD"
 #endif /* CURRENT_PACKAGE_KEY */
 #ifndef CURRENT_COMPONENT_ID
-#define CURRENT_COMPONENT_ID "AST-0.1.0.0-HnUGpkWgT633dYooFIiK2e"
+#define CURRENT_COMPONENT_ID "AST-0.1.0.0-KSFYYNus19tAqLao65OqeD"
 #endif /* CURRENT_COMPONENT_ID */
 #ifndef CURRENT_PACKAGE_VERSION
 #define CURRENT_PACKAGE_VERSION "0.1.0.0"

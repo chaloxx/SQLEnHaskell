@@ -3116,13 +3116,13 @@ happyReduction_150 _
 happyReduce_151 = happySpecReduce_1  39 happyReduction_151
 happyReduction_151 _
 	 =  HappyAbsSyn39
-		 (Dates
+		 (Date
 	)
 
 happyReduce_152 = happySpecReduce_1  39 happyReduction_152
 happyReduction_152 _
 	 =  HappyAbsSyn39
-		 (Tim
+		 (Time
 	)
 
 happyNewToken action sts stk
@@ -3320,8 +3320,8 @@ data Token =   TCUser
              | TDate
              | TTime
              | TDatTim DateTime
-             | TDat   Date
-             | TTim Time
+             | TDat   Dates
+             | TTim Times
 
              | TOn
              | TJoin

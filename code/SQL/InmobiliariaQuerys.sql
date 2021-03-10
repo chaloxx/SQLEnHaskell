@@ -1,5 +1,6 @@
 SELECT USER pablo alonso;
 USE Inmobiliaria;
+
 /*a*/
 /*Nombres de los dueños de los inmuebles*/
 /*
@@ -147,15 +148,6 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
 /*SELECT max,maxDiv3 FROM SELECT MAX(precio) AS max , MAX(precio)/3 AS maxDiv3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
 /*SELECT COUNT(direccion) AS count AS total FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
 /*SELECT ALL FROM Limita WHERE nombreP2 LIKE "Ros%"*/
-
-
-
-
-
-
-
-
-
-
-
 /*SELECT COUNT(precio),nombreP FROM Inmueble GROUP BY nombreP*/
+/*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 10:00:00*/
+SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 

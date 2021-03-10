@@ -119,6 +119,9 @@ checkTypeExp s g (A1 _) = return String
 checkTypeExp s g (A2 _) = return Float
 checkTypeExp s g (A3 _) = return Int
 checkTypeExp s g (A4 _) = return Float
+checkTypeExp s g (A5 _) = return Datetime
+checkTypeExp s g (A6 _) = return Date
+checkTypeExp s g (A7 _) = return Time
 checkTypeExp s g (Field v) = lookupList g s v
 
 checkTypeExp s g (Dot s1 s2) = lookupList g [s1] s2
@@ -137,7 +140,7 @@ checkTypeExp' s b g exp1 exp2 e =
 -- (tercer nivel)
 checkTypeExp'' Float e = ok Float
 checkTypeExp'' Int e = ok Int
-checkTypeExp'' _ e = typeError $ (show e)
+checkTypeExp'' _ e = typeError $ (show2 e)
 
 
 

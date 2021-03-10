@@ -1,0 +1,5 @@
+library
+  exposed-modules:     AST
+  other-modules:
+  build-depends:       time-1.8.0.2
+
