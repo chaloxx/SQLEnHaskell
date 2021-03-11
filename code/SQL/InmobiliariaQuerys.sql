@@ -151,5 +151,8 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
 /*SELECT COUNT(precio),nombreP FROM Inmueble GROUP BY nombreP*/
 /*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 10:00:00*/
 /*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 */
+/*SELECT ALL FROM Visitas LIMIT 50*/
 /*SELECT ALL FROM Visitas LIMIT -1*/
-SELECT ALL FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left
+/*SELECT ALL FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left*/
+/*SELECT DISTINCT left.codigo_cliente FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL*/
+SELECT left.codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL

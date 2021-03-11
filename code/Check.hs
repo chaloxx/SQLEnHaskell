@@ -95,7 +95,7 @@ checkTypeBoolExp'' exp1 exp2 s types e  = do (t1,t2) <- checkTypeBoolExp exp1 s 
 
 checkTypeBoolExp' exp1 exp2 s types e =
    do (t1,t2) <- checkTypeExp s types exp1 //// checkTypeExp s types exp2
-      case t1 == t2 || (intOrFloat t1 && intOrFloat t2) of
+      case t1 == t2 || (intOrFloat t1 && intOrFloat t2) || t1 == TNulo || t2 == TNulo of
          True -> return Bool
          False -> typeError (show e)
 
@@ -109,21 +109,21 @@ checkTypedExpList _ _ [] = return ()
 checkTypedExpList names types (All:xs) = checkTypedExpList names types xs
 checkTypedExpList names types (arg:xs) = checkTypeExp names types arg >> checkTypedExpList names types xs
 
--- Chequea el tipo de un argumento (primer nivel)
+-- Chequea el tipo de expresiones numéricas y constantes (primer nivel)
 checkTypeExp :: TableNames -> ContextFun Type -> Args -> Either String Type
 checkTypeExp s g e@(Plus exp1 exp2) = checkTypeExp' s False g exp1 exp2 e
 checkTypeExp s g e@(Minus exp1 exp2) = checkTypeExp' s False g exp1 exp2 e
 checkTypeExp s g e@(Times exp1 exp2) = checkTypeExp' s False g exp1 exp2 e
 checkTypeExp s g e@(Div exp1 exp2) = checkTypeExp' s True g exp1 exp2 e
-checkTypeExp s g (A1 _) = return String
-checkTypeExp s g (A2 _) = return Float
-checkTypeExp s g (A3 _) = return Int
-checkTypeExp s g (A4 _) = return Float
-checkTypeExp s g (A5 _) = return Datetime
-checkTypeExp s g (A6 _) = return Date
-checkTypeExp s g (A7 _) = return Time
+checkTypeExp _ _ (A1 _) = return String
+checkTypeExp _ _ (A2 _) = return Float
+checkTypeExp _ _ (A3 _) = return Int
+checkTypeExp _ _ (A4 _) = return Float
+checkTypeExp _ _ (A5 _) = return Datetime
+checkTypeExp _ _ (A6 _) = return Date
+checkTypeExp _ _ (A7 _) = return Time
+checkTypeExp _ _ Nulo =  return TNulo
 checkTypeExp s g (Field v) = lookupList g s v
-
 checkTypeExp s g (Dot s1 s2) = lookupList g [s1] s2
 checkTypeExp s g (Negate exp) = checkTypeExp s g exp
 checkTypeExp s g (Brack exp) = checkTypeExp s g exp

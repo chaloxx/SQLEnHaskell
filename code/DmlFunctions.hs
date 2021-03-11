@@ -645,6 +645,7 @@ prod' (Subquery s) = let c = conversion s
 
 
 prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
+                                  fromIO $ put "Aca entra"
                                   (_,ns,fs,[t]) <- runQuery' [(1,Prod ts)]
                                   if length ns /= 2 then retFail "Error en join"
                                   else do tabTypes <- askTypes
@@ -663,7 +664,7 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
 
                                                        let fs2' = map (\f -> if f `elem` fs then f
                                                                              else f//n2) fs2
-                                                       t' <- ioEitherMapT (mapFun eval fs2') t                                                                             
+                                                       t' <- ioEitherMapT (mapFun eval fs2') t
                                                        collapseContext nn ns fs
                                                        return (nn,fs,t')
                                            JRight -> do (n1,fs1,_) <- prod' arg1

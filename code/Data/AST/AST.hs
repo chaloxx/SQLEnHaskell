@@ -385,7 +385,7 @@ type ForeignKey = [(String,[(String,String)],RefOption,RefOption)]
 type Reference = (String,RefOption,RefOption)
 
 -- Tipos de datos
-data Type = String | Int | Float | Bool | Datetime | Date | Time  deriving (Show,Eq,Ord)
+data Type = String | Int | Float | Bool | Datetime | Date | Time | TNulo  deriving (Show,Eq,Ord)
 
 
 -- Resultado del parseo
