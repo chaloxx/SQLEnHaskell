@@ -278,12 +278,12 @@ insertCola (n,x) c@((n',x'):xs) = if n < n' then (n',x'): (insertCola (n,x) xs)
 -- Convierte un árbol de consulta en una cola para poder hacer una ejecucion secuencial
 -- de los comandos en un orden dado
 conversion :: DML ->  Cola AR
-conversion (Union d1 d2) = let (a1,a2) = conversion d1 ||| conversion d2
-                           in [(0,Uni a1 a2)]
-conversion (Diff d1 d2) = let (a1,a2) = conversion d1 ||| conversion d2
-                           in [(0,Dif a1 a2)]
-conversion (Intersect d1 d2) = let (a1,a2) = conversion d1 ||| conversion d2
-                               in [(0,Inters a1 a2)]
+-- conversion (Union d1 d2) = let (a1,a2) = conversion d1 ||| conversion d2
+--                            in [(0,Uni a1 a2)]
+-- conversion (Diff d1 d2) = let (a1,a2) = conversion d1 ||| conversion d2
+--                            in [(0,Dif a1 a2)]
+-- conversion (Intersect d1 d2) = let (a1,a2) = conversion d1 ||| conversion d2
+--                                in [(0,Inters a1 a2)]
 conversion (Select dist args dml) = insertCola (6,Pi dist args) $ conversion dml
 conversion (From args dml) = insertCola (1,Prod args) $ conversion dml
 conversion (Where boolExp dml) = insertCola (3,Sigma boolExp) $ conversion dml
@@ -576,39 +576,39 @@ runQuery' ((_,Top n):xs) =
                     Right (t',_) -> return (b,l1,l2,[t'])
 
 -- Segundo nivel (operaciones de conjuntos)
-{-
-runQuery'' g a1 a2 xs op =
- do let (r1',r2') = runQuery' g a1 ||| runQuery' g a2
-    r1 <- r1'
-    r2 <- r2'
-    return $ do
-    (g1,_,l11,l12,s1) <- r1
-    (g2,_,l21,l22,s2) <- r2
-    if notUnique s1 || notUnique s2 then errorSet
-    else if notEqualLen l12 l22 then errorSet2
-         else if not $ equalType (trd' g1) (trd' g2) l11 l21 l12 l22  then errorSet3
-              else do let ls =  unionL l11 l21 -- unir tablas relacionadas
-                      let g12 =  updateContext2 g1 (snd' g2) -- unir valor de variables de tupla
-                      let g13 =  updateContext3 g12 (trd' g2)    -- unir tipo de variables de tupla
-                      let (t1,t2) = sortedT (c l12) (head s1) ||| sortedT (c l12) (replaceAllKeys l22 l12 (head s2)) -- Ordenar árboles para hacer una unión ordenada (mejor eficiencia)
-                      -- ambos entornos son iguales, tomamos el primero
-                      ok (g13,False,ls,l12,[op (c l12) t1 t2])
+--
+-- runQuery'' g a1 a2 xs op =
+--  do let (r1',r2') = runQuery' g a1 ||| runQuery' g a2
+--     r1 <- r1'
+--     r2 <- r2'
+--     return $ do
+--     (g1,_,l11,l12,s1) <- r1
+--     (g2,_,l21,l22,s2) <- r2
+--     if notUnique s1 || notUnique s2 then errorSet
+--     else if notEqualLen l12 l22 then errorSet2
+--          else if not $ equalType (trd' g1) (trd' g2) l11 l21 l12 l22  then errorSet3
+--               else do let ls =  unionL l11 l21 -- unir tablas relacionadas
+--                       let g12 =  updateContext2 g1 (snd' g2) -- unir valor de variables de tupla
+--                       let g13 =  updateContext3 g12 (trd' g2)    -- unir tipo de variables de tupla
+--                       let (t1,t2) = sortedT (c l12) (head s1) ||| sortedT (c l12) (replaceAllKeys l22 l12 (head s2)) -- Ordenar árboles para hacer una unión ordenada (mejor eficiencia)
+--                       -- ambos entornos son iguales, tomamos el primero
+--                       ok (g13,False,ls,l12,[op (c l12) t1 t2])
+--
+--  where notUnique s = not $ length s == 1
+--
+--        notEqualLen l1 l2 = not $ length l1 == length l2
+--
+--        equalType _ _ _ _ [] [] = True
+--        equalType e1 e2 l11 l21 (x:xs) (y:ys) = if lookupList e1 l11 x == lookupList e2 l21 y then equalType e1 e2 l11 l21 xs ys
+--        else False
+--        equalType _ _ _ _ _ _ = False
+--
+--        replaceAllKeys  [] _ t = t
+--        replaceAllKeys (x:xs) (y:ys) t = if x /= y then replaceAllKeys xs ys (mapT (updateKey x y) t)
+--                                         else replaceAllKeys xs ys t
+--
+--
 
- where notUnique s = not $ length s == 1
-
-       notEqualLen l1 l2 = not $ length l1 == length l2
-
-       equalType _ _ _ _ [] [] = True
-       equalType e1 e2 l11 l21 (x:xs) (y:ys) = if lookupList e1 l11 x == lookupList e2 l21 y then equalType e1 e2 l11 l21 xs ys
-       else False
-       equalType _ _ _ _ _ _ = False
-
-       replaceAllKeys  [] _ t = t
-       replaceAllKeys (x:xs) (y:ys) t = if x /= y then replaceAllKeys xs ys (mapT (updateKey x y) t)
-                                        else replaceAllKeys xs ys t
-
-
--}
 
 
 
@@ -651,16 +651,33 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
                                           tabNames <- giveMeTableNames
                                           let tabNames' = ns ++ [x | x<-tabNames, not $ x `elem` ns]
                                           fromEither $ checkTypeBoolExp exp tabNames' tabTypes
+                                          let eval = \reg -> do fromRegisterToContext ns reg
+                                                                evalBoolExp tabNames' exp
+                                          let [n1,n2] = ns
+                                          let nn = n1++"Join"++n2
                                           case j of
-                                            Inner -> do  t' <- ioEitherFilterT (\reg-> do fromRegisterToContext ns reg
-                                                                                          -- Evaluar expresión booleana
-                                                                                          evalBoolExp tabNames'  exp) t
-                                                         let [n1,n2] = ns
-                                                         let nn = n1++"Join"++n2
-                                                         collapseContext nn ns fs
-                                                         tabVals <- askVals
-                                                         return (nn,fs,t')
+                                           Inner -> do  t' <- ioEitherFilterT eval t
+                                                        collapseContext nn ns fs
+                                                        return (nn,fs,t')
+                                           JLeft -> do (n2,fs2,_) <- prod' arg2
 
+                                                       let fs2' = map (\f -> if f `elem` fs then f
+                                                                             else f//n2) fs2
+                                                       t' <- ioEitherMapT (mapFun eval fs2') t                                                                             
+                                                       collapseContext nn ns fs
+                                                       return (nn,fs,t')
+                                           JRight -> do (n1,fs1,_) <- prod' arg1
+                                                        let fs1' = map (\f -> if f `elem` fs then f
+                                                                              else f//n2) fs1
+                                                        t' <- ioEitherMapT (mapFun eval fs1') t
+                                                        collapseContext nn ns fs
+                                                        return (nn,fs,t')
+
+         where mapFun eval fs reg  = do b <- eval reg
+                                        if b then return reg
+                                        else return $ mapReg fs reg
+               mapReg fs reg = mapWithKey (\k v -> if k `elem` fs then Nulo
+                                                   else v) reg
                                             --JLeft -> retOk $ (g',groupBym,table:names,mapT f t3)
        --where mapJoin
 

@@ -150,4 +150,6 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
 /*SELECT ALL FROM Limita WHERE nombreP2 LIKE "Ros%"*/
 /*SELECT COUNT(precio),nombreP FROM Inmueble GROUP BY nombreP*/
 /*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 10:00:00*/
-SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 
+/*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 */
+/*SELECT ALL FROM Visitas LIMIT -1*/
+SELECT ALL FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left
