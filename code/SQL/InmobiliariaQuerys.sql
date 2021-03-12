@@ -155,4 +155,6 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
 /*SELECT ALL FROM Visitas LIMIT -1*/
 /*SELECT ALL FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left*/
 /*SELECT DISTINCT left.codigo_cliente FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL*/
-SELECT left.codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL
+
+/*SELECT left.codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL Esto va a tirar un error*/
+SELECT DISTINCT codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL /*Esto no*/

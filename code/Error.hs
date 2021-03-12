@@ -27,7 +27,7 @@ errorField1 x = Left (x ++ " no es un atributo válido\n")
 errorField2 x t1 t2 = x ++ " tiene tipo " ++ (show t1) ++ " ,se esperaba tipo " ++ (show t2) ++ "\n"
 
 
-
+--
 typeOfArgs :: Args -> Type
 typeOfArgs (A1 _) = String
 typeOfArgs (A3 _) = Int
@@ -35,6 +35,7 @@ typeOfArgs (A4 _) = Float
 typeOfArgs (A5 _) = Datetime
 typeOfArgs (A6 _) = Date
 typeOfArgs (A7 _) = Time
+typeOfArgs arg = error $ show arg
 
 
 

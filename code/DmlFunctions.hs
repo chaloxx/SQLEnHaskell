@@ -96,7 +96,11 @@ delete n exp = do e <- askEnv
                   let r = url  e
                   let u = name e
                   t <- obtainTable r n
-                  [TK k,TR ref] <- loadInfoTable ["key","refBy"] e n :: Query [TableInfo]
+                  [TK k,TR ref, TT types ,TS scheme] <- loadInfoTable ["key","refBy","types","scheme"] e n :: Query [TableInfo]
+                  let tabTypes = singleton n $ fromList $ zip scheme types
+                  let tabVals = singleton n $ fromList $ map (\f -> (f,Nulo)) scheme
+                  updateTypes tabTypes
+                  updateVals tabVals
                   let (xs,ys,zs) =  partRefDel  ref
                   xs' <- obtainTableList xs -- tablas que tienen una referencia de tipo restricted sobre t'
                   ys' <- obtainTableList ys -- tablas que tienen una referencia de tipo cascades sobre t'
@@ -109,8 +113,7 @@ delete n exp = do e <- askEnv
   where  predic k n xs xs' ys ys' zs zs' reg =
            do let r = singleton n reg
               -- Actualizar contexto
-              v <-askVals
-              updateVals (union r v)
+              updateVals r
               -- Evaluar expresión booleana
               b <- evalBoolExp [n] exp
               if not b then retOk True -- Devuelve true si la expr dio falso
@@ -172,54 +175,55 @@ resolNull (n:ns) (t:ts) k x = do e <- askEnv
 
 -- Actualizar tabla n (primer nivel)
 update :: String -> ([String],[Args]) -> BoolExp -> Query ()
-update n (fields,values) exp = do e <- askEnv
-                                  let r = url e
-                                  [TS sch,TT typ,TR ref,TK key,HN nulls] <- loadInfoTable ["scheme","types","refBy","key","haveNull"] e n -- cargar esquemas y tipos
-                                  update'  fields values sch typ r n exp ref key nulls
+update n (fields,numExps) exp = do e <- askEnv
+                                   [TS sch,TT typ,TR ref,TK key,HN nulls] <- loadInfoTable ["scheme","types","refBy","key","haveNull"] e n -- cargar esquemas y tipos
+                                   let tabTypes = singleton n $ fromList $ zip sch typ
+                                   let tabVals = singleton n $ fromList $   map (\f -> (f,Nulo)) sch
+                                   updateVals tabVals
+                                   updateTypes tabTypes
+                                   update'  fields numExps sch n exp ref key nulls
 
 -- Actualizar tabla (segundo nivel)
-update' fields values sch typ r n exp ref key nulls =
-  let types = fromList $ zip sch typ
-      h = singleton n types
-      types' = map (\x -> types ! x) fields
-      setKeys = toSet key
+update' fields numExps sch n boolExp ref key nulls =
+  let setKeys = toSet key
       setFields = toSet fields
       setScheme = toSet sch in
       -- Chequear que los atributos modificados están dentro del esquema y que ninguno es parte de la key de la tabla
       if (not $ S.isSubsetOf setFields setScheme) || S.intersection setKeys setFields /= S.empty then errorUpdateFields fields
-      else do oldTypes <- askTypes
-              updateTypes $ union h oldTypes
-              newTypes <- askTypes
-              Q (\c -> return $ do -- Chequear tipo de los valores que se van a ingresar
-                                   checkTyped types' values
-                                   checkTypeBoolExp exp [n] newTypes
-                                   return (c,()))
-               -- chequear tipos de valores recibidos y expresión booleana
-              t <- obtainTable r n -- cargar tabla
-              let vals = fromList $ zip fields values
-              let (xs,ys,zs) = partRefTable ref
-              xs' <- obtainTableList xs
-              ys' <- obtainTableList ys
-              zs' <- obtainTableList zs
-              t' <- ioEitherMapT (updateValue nulls key n exp vals xs xs' ys ys' zs zs' ) t
-              Q(\c -> do reWrite t' $ r ++ n
-                         return $ Right (c,()))
+      else do  tabTypes <- askTypes
+               Q (\c -> return $ do-- -- chequear tipos de expresiones numéricas y expresión booleana
+                                    sequence $ map  (\e -> checkTypeExp [n] tabTypes e) numExps
+                                    checkTypeBoolExp boolExp [n] tabTypes
+                                    return (c,()))
+               e <- askEnv
+               let r = url e
+               t <- obtainTable r n -- cargar tabla
+               let (xs,ys,zs) = partRefTable ref
+               xs' <- obtainTableList xs
+               ys' <- obtainTableList ys
+               zs' <- obtainTableList zs
+               t' <- ioEitherMapT (updateValue nulls key n boolExp fields numExps xs xs' ys ys' zs zs' ) t
+               Q(\c -> do reWrite t' $ r ++ n
+                          return $ Right (c,()))
 
                  -- Función para modificar valores en registro x
            where toSet = S.fromList
                  -- Función para modificar los valores de aquellos registros para los cuales exp es un predicado válido
-                 updateValue nulls k n exp vals xs xs' ys ys' zs zs' reg =
+                 updateValue nulls k n boolExp fields numExps xs xs' ys ys' zs zs' reg =
                     do let r = singleton n reg
-                       -- Evaluar expresion con un contexto actualizado
-                       oldVal <- askVals
-                       updateVals $ union r oldVal
-                       b <- evalBoolExp [n] exp
-                       if b then do -- Chequear inconsistencias con referencias
+                       -- Evaluar expresion booleana
+                       updateVals $ singleton n reg
+                       b <- evalBoolExp [n] boolExp
+                       if b then do
+                                    -- Evaluar
+                                    vals <- sequence $ map (\e -> evalIntExp [n] e) numExps
+                                    let vals' = fromList $  zip fields vals
+                                    -- Chequear inconsistencias con referencias
                                     resolRestricted xs xs' k reg
-                                    resolCascades ys ys' k (mapT (funMap2 nulls vals k reg)) reg
+                                    resolCascades ys ys' k (mapT (funMap2 nulls vals' k reg)) reg
                                     resolNull zs zs' k reg
-                                    -- Finalmente mapear nuevos valores
-                                    retOk $ mapWithKey (funMap nulls vals) reg
+                                    -- Mapear
+                                    return $ mapWithKey (funMap nulls vals') reg
                        else retOk reg
 
                           -- Actualiza el valor del atributo k
@@ -245,7 +249,7 @@ partRefTable ((x,_,v):r) =   let (xs,ys,zs) = partRefTable r in
 obtainTableList :: [TableName] -> Query [Tab]
 obtainTableList [] = return []
 obtainTableList (x:xs) = do e <- askEnv
-                            let r = url' e x
+                            let r = url e
                             t <- obtainTable r x
                             ts <- obtainTableList xs
                             return (t:ts)
@@ -422,6 +426,7 @@ runQuery'  ((_,Pi unique args):rs) =
                                             t <- ioEitherMapT (proy names args) (isNull tables) -- Aplicar proyecciones
                                             let newFields = toFieldName fields args    -- Obtener strings para imprimir de atributos solicitados
                                             let newTabName = foldl (++) "" names
+                                            tabVals <- askVals
                                             updateFieldsInContext newTabName args
                                             if All `elem` args then do collapseContext newTabName names fields
                                                                        distinct unique [newTabName] newFields t
@@ -511,7 +516,6 @@ runQuery' ((_,Sigma exp):xs) =
          tabNames <- giveMeTableNames
          let tabNames' = localNames ++ [x | x<-tabNames, not $ x `elem` localNames]
          fromEither $  checkTypeBoolExp exp tabNames' tabTypes
-         tabVals <- askVals
          t' <- ioEitherFilterT (\reg-> do -- Actualizar contexto
                                           fromRegisterToContext localNames reg
                                           -- Evaluar expresión booleana
@@ -645,7 +649,6 @@ prod' (Subquery s) = let c = conversion s
 
 
 prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
-                                  fromIO $ put "Aca entra"
                                   (_,ns,fs,[t]) <- runQuery' [(1,Prod ts)]
                                   if length ns /= 2 then retFail "Error en join"
                                   else do tabTypes <- askTypes
@@ -905,6 +908,7 @@ evalBoolExp s (GEqual  exp1 exp2) = evalBoolExp' (>=)  exp1 exp2 s
 
 -- Determina si la consulta dml es vacía
 evalBoolExp _ (Exist dml) = do let c = conversion  dml
+                               tabVals <- askVals
                                (_,ts,_,ls)<- runQuery' c
                                --deleteFromContext ts
                                if length ls /= 1 then errorExist

@@ -74,27 +74,31 @@ INSERT INTO Escribe (Id, Isbn, Año)
 
 
 /*Ej4 a:*/
+/*
 UPDATE Autor SET
     Residencia = "Buenos Aires"
     WHERE Nombre = "Abelardo" AND Apellido = "Castillo";
-
+*/
 /*Ej4 b:*/
+/*
 UPDATE Libro SET
     Precio = Precio + (Precio/10)
     WHERE Editorial = "UNR";
-
+*/
 /*Ej4 c:*/
+/*
 UPDATE Libro INNER JOIN Escribe ON Libro.Isbn = Escribe.Isbn INNER JOIN Autor ON Escribe.Id = Autor.Id SET
     Precio = CASE
                  WHEN (Nacionalidad <> "Argentina" AND Precio < 200) THEN Precio + (Precio/5)
                  WHEN (Nacionalidad <> "Argentina" AND Precio >= 200) THEN Precio + (Precio/10)
              END;
-
+*/
 
 /*Ej4 d:*/
+/*
 DELETE FROM Libro
 	WHERE EXISTS (SELECT * FROM Escribe WHERE Libro.Isbn = Escribe.Isbn AND Año = '1998-1-1');
-
+*/
 
 
 /*Ej5:*/
