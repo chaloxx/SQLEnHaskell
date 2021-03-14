@@ -189,7 +189,9 @@ dropAllTable e = do res <- unWrapperQuery e $ obtainTable "DataBase/system/" "Ta
                      Right t -> do  let reg = createInfoRegister e
                                     let t' = filterT (comp3 fields0 reg) t
                                     let path  = url e
-                                    deleteDirectory path
+                                    b <- doesDirectoryExist path
+                                    if b then deleteDirectory path
+                                    else return ()
                                     createDirectory path
                                     reWrite t' tablepath
                                     succesDropAllTables (dataBase e)

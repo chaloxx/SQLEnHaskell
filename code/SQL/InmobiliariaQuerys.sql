@@ -89,24 +89,25 @@ WHERE  Persona.codigo = PrefiereZona.codigo_cliente AND
 
 /*g1*/
 /*
-SELECT Persona.nombre, Persona.apellido, Inmueble.codigo, Inmueble.nombreZ, Inmueble.precio
+SELECT Persona.nombre, Persona.apellido, Inmueble.codigo, Inmueble.nombre_zona, Inmueble.precio
 FROM   Persona, PrefiereZona AS PZ, Limita, Inmueble
-WHERE  Persona.codigo = PZ.codigoCliente AND
-       (Limita.nombreP = PZ.nombreP AND
-       Limita.nombreZ = PZ.nombreZ AND
-       Inmueble.nombreP = Limita.nombreP2 AND
-       Inmueble.nombreZ = Limita.nombreZ2
+WHERE  Persona.codigo = PZ.codigo_cliente AND
+       (Limita.nombre_poblacion = PZ.nombre_poblacion AND
+       Limita.nombre_zona = PZ.nombre_zona AND
+       Inmueble.nombre_poblacion = Limita.nombre_poblacion_2 AND
+       Inmueble.nombre_zona = Limita.nombre_zona_2
        OR
-       Limita.nombreP2 = PZ.nombreP AND
-       Limita.nombreZ2 = PZ.nombreZ AND
-       Inmueble.nombreP = Limita.nombreP AND
-       Inmueble.nombreZ = Limita.nombreZ) AND
-       Persona.codigo IN (1001,1011,1013)*/
-
+       Limita.nombre_poblacion_2 = PZ.nombre_poblacion AND
+       Limita.nombre_zona_2 = PZ.nombre_zona AND
+       Inmueble.nombre_poblacion = Limita.nombre_poblacion AND
+       Inmueble.nombre_zona = Limita.nombre_zona) AND
+       Persona.codigo IN (1001,1011,1013)
+*/
 
 /*Esta subconsulta devuelve 1001,1011 y 1013 */
 /*g2*/
-/*SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
+/*
+SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
                                              WHERE Cliente.codigo = PZ2.codigo_cliente AND
                                                   I2.nombre_poblacion = PZ2.nombre_poblacion AND
                                                   I2.nombre_zona = PZ2.nombre_zona AND
@@ -115,46 +116,36 @@ WHERE  Persona.codigo = PZ.codigoCliente AND
                                                               Visitas.codigo_inmueble = I2.codigo));
 */
 
-/*
-SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2,Inmueble AS I2
-                                              WHERE Cliente.codigo = PZ2.codigoCliente AND
-                                                   I2.nombreP = PZ2.nombreP AND
-                                                   I2.nombreZ = PZ2.nombreZ AND
-                                                   NOT EXISTS (SELECT ALL FROM Visitas WHERE
-                                                               Visitas.codigoCliente = Cliente.codigo AND
-                                                               Visitas.codigoInmueble = I2.codigo))
-*/
 
 
-/*SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP*/
-/*SELECT SUM(precio),nombreP,nombreZ FROM Inmueble GROUP BY nombreP,nombreZ*/
-/*SELECT ALL FROM Inmueble GROUP BY nombreP*/
-/*SELECT ALL FROM SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP*/
-/*SELECT ALL FROM SELECT ALL FROM SELECT SUM(precio),nombreP FROM Inmueble GROUP BY nombreP*/
-/*SELECT nombreP FROM  (SELECT SUM(precio) AS sum,nombreP FROM Inmueble GROUP BY nombreP) WHERE sum > 1000000.0*/
-/*SELECT nombreP,nombreZ FROM Inmueble GROUP BY nombreP HAVING SUM(precio) > 1000000.0*/
-/*SELECT Inmueble.precioMedio AS precioMean AS somePrecio AS pepo FROM (SELECT AVG(precio) AS precioMedio ,nombreP FROM Inmueble GROUP BY nombreP)*/
-/*SELECT nombreP,nombreZ FROM Inmueble GROUP BY nombreP HAVING SUM(precio) > 1000000.0*/
-/*SELECT ALL FROM (SELECT nombreP FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0) AS Inmueblazo*/
-/*SELECT Inmueblazo.nombreP FROM (SELECT nombreP FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0) AS Inmueblazo*/
-/*SELECT SUM(precio) FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT SUM(precio)+1+2+3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT SUM(precio)+1+2+3 AS total, SUM(precio)+1+2+3 AS totales FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT SUM(precio)+1+2+3 AS total, SUM(precio)+1+2+3 AS total FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT SUM(precio) AS total, SUM(precio)*3 AS totalBy3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT MIN(precio) AS min, MIN(precio)*3 AS minBy3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT MIN(precio) AS min, MIN(precio)/3 AS minDiv3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT MIN(precio) , MIN(precio)/3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT max,maxDiv3 FROM SELECT MAX(precio) AS max , MAX(precio)/3 AS maxDiv3 FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT COUNT(direccion) AS count AS total FROM Inmueble GROUP BY nombreP HAVING AVG(superficie) > 100.0*/
-/*SELECT ALL FROM Limita WHERE nombreP2 LIKE "Ros%"*/
-/*SELECT COUNT(precio),nombreP FROM Inmueble GROUP BY nombreP*/
-/*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 10:00:00*/
-/*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 */
-/*SELECT ALL FROM Visitas LIMIT 50*/
-/*SELECT ALL FROM Visitas LIMIT -1*/
-/*SELECT ALL FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left*/
-/*SELECT DISTINCT left.codigo_cliente FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL*/
-
-/*SELECT left.codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL Esto va a tirar un error*/
-SELECT DISTINCT codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL /*Esto no*/
+SELECT SUM(precio),nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion;
+SELECT SUM(precio),nombre_poblacion,nombre_zona FROM Inmueble GROUP BY nombre_poblacion,nombre_zona;
+SELECT nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion;
+SELECT ALL FROM SELECT SUM(precio),nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion;
+SELECT ALL FROM SELECT ALL FROM SELECT SUM(precio),nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion;
+SELECT nombre_poblacion FROM  (SELECT SUM(precio) AS sum,nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion) WHERE sum > 1000000.0;
+SELECT nombre_poblacion,nombre_zona FROM Inmueble GROUP BY nombre_poblacion HAVING SUM(precio) > 1000000.0;
+SELECT precioMedio AS precioMean AS somePrecio AS pepo FROM (SELECT AVG(precio) AS precioMedio ,nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion);
+SELECT nombre_poblacion,nombre_zona FROM Inmueble GROUP BY nombre_poblacion HAVING SUM(precio) > 1000000.0;
+SELECT ALL FROM (SELECT nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0) AS Inmueblazo;
+SELECT Inmueblazo.nombre_poblacion FROM (SELECT nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0) AS Inmueblazo;
+SELECT SUM(precio) FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT SUM(precio)+1+2+3 FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT SUM(precio)+1+2+3 AS total, SUM(precio)+1+2+3 AS totales FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT SUM(precio)+1+2+3 AS total, SUM(precio)+1+2+3 AS total FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT SUM(precio) AS total, SUM(precio)*3 AS totalBy3 FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT MIN(precio) AS min, MIN(precio)*3 AS minBy3 FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT MIN(precio) AS min, MIN(precio)/3 AS minDiv3 FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT MIN(precio) , MIN(precio)/3 FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT max,maxDiv3 FROM SELECT MAX(precio) AS max , MAX(precio)/3 AS maxDiv3 FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT COUNT(direccion) AS count AS total FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
+SELECT ALL FROM Limita WHERE nombre_poblacion_2 LIKE "Ros%";
+SELECT COUNT(precio),nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion;
+SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 10:00:00;
+/*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 ;*//*Error de tipo*/
+SELECT ALL FROM Visitas LIMIT 50;
+SELECT ALL FROM Visitas LIMIT 0;
+SELECT ALL FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left;
+SELECT DISTINCT left.codigo_cliente FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL;
+/*SELECT left.codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL;*//*Esto va a tirar un error;*/
+SELECT DISTINCT codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL;
