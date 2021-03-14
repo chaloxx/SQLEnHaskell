@@ -1,0 +1,45 @@
+                                  Intérprete de SQL
+                                  -----------------
+
+Objetivo :
+----------
+El objetivo de este proyecto es poder representar tanto la sintaxis básica del estándar sql como su semántica usando
+ el lenguaje Haskell.
+
+
+Instalación:
+------------
+Ejecutar install.sh. Se instalarán las librerías necesarias y se compilará el programa usando el comando apropiado.
+
+
+
+Forma de uso:
+------------
+Una vez compilado el programa basta correrlo usando ./Init. En el directorio SQL se proporcionan ejemplos de su uso.
+Advertencia: Los nombres de scripts que terminan con MySql deben ser ejecutados usando este dbms. Fueron usados para
+corroborar resultados.
+
+
+Organización de los archivos (para más detalles ver el código fuente):
+-----------------------------
+*) Init : Módulo inicial. Ofrece una linea de comandos al usuario.
+*) Run : Llama al parser y le pasa el comando a la función adecuada para que lo procese.
+*) DdlFunctions : Contiene las operaciones DDL.
+*) DmlFunctions : Contiene las operaciones DML y las evaluaciones de las expresiones booleanas o numéricas.
+*) UserFunctions : Operaciones para crear, borrar, seleccionar usuario.
+*) AST (Data/AST): Contiene el AST y todas las abstracciones necesarias.
+*) AVl (Data/Avl): Definición de Avl y funciones correspondientes.
+*) COrdering (Data/COrdering) :  Definición de COrdering y funciones correspondientes.
+*) DynGHC : Operaciones con módulos (caragar,leer,escribir)
+*) Error : Define los errores.
+*) Url : Crea rutas dentro del sistema de archivos.
+*) Check : Hace distintos chequeos para comprobar que las operaciones se pueden realizar con seguridad.
+
+
+
+Decisiones de diseño:
+---------------------
+ *) Representar tanto DDL como DML
+ *) Representar tablas con árboles AVL  y registros con Diccionarios.
+ *) Almacenar tablas de forma persistente como módulos haskell y cargarlos dinámicamente.
+ *) Almacenar un estado usando una mónada.
