@@ -91,7 +91,7 @@ toText (x:xs) = (show x) ++ " , " ++ (toText xs)
 
 
 -- Borrar aquellos registros de una tabla para los cuales exp es verdadero
-delete :: String ->  BoolExp -> Query ()
+delete :: TableName ->  BoolExp -> Query ()
 delete n exp = do e <- askEnv
                   let r = url  e
                   let u = name e
@@ -116,7 +116,7 @@ delete n exp = do e <- askEnv
               updateVals r
               -- Evaluar expresión booleana
               b <- evalBoolExp [n] exp
-              if not b then retOk True -- Devuelve true si la expr dio falso
+              if not b then retOk True
               else do resolRestricted xs xs' k reg
                       resolCascades ys ys' k  (filterT (predic2 k reg))  reg -- Si la restricción es cascades borrar todos los registros que apunten a reg
                       resolNull zs zs' k reg -- Si la restricción es nullifies nulificar todos los registros que apunten a reg (si aceptan nulos)
@@ -145,7 +145,7 @@ resolRestricted (n:ns) (t:ts) k x = if isMember k x t then errorRestricted x n
 
 
 -- Esparce borrado o modificación sobre los registros cuya clave foránea es k de una lista de tablas
-resolCascades :: [String] -> [Tab] -> [String] -> (Tab -> Tab) -> Reg -> Query ()
+resolCascades :: TableNames -> [Tab] -> FieldNames -> (Tab -> Tab) -> Reg -> Query ()
 resolCascades  _ [] _ _  _ = return ()
 resolCascades (n:ns) (t:ts) k f x = do  e <- askEnv
                                         let (t',r) =  f t ||| url' e n
@@ -188,8 +188,9 @@ update' fields numExps sch n boolExp ref key nulls =
   let setKeys = toSet key
       setFields = toSet fields
       setScheme = toSet sch in
-      -- Chequear que los atributos modificados están dentro del esquema y que ninguno es parte de la key de la tabla
-      if (not $ S.isSubsetOf setFields setScheme) || S.intersection setKeys setFields /= S.empty then errorUpdateFields fields
+      -- Chequear que los atributos modificados están dentro del esquema y que ninguno es parte de la clave primaria
+      -- || S.intersection setKeys setFields /= S.empty
+      if not $ S.isSubsetOf setFields setScheme  then errorUpdateFields fields
       else do  tabTypes <- askTypes
                Q (\c -> return $ do-- -- chequear tipos de expresiones numéricas y expresión booleana
                                     sequence $ map  (\e -> checkTypeExp [n] tabTypes e) numExps
@@ -209,11 +210,13 @@ update' fields numExps sch n boolExp ref key nulls =
                  -- Función para modificar valores en registro x
            where toSet = S.fromList
                  -- Función para modificar los valores de aquellos registros para los cuales exp es un predicado válido
-                 updateValue nulls k n boolExp fields numExps xs xs' ys ys' zs zs' reg =
+                 updateValue nulls k n boolExp fields numExps xs xs' ys ys' zs zs' reg left right =
                     do let r = singleton n reg
                        -- Evaluar expresion booleana
                        updateVals $ singleton n reg
                        b <- evalBoolExp [n] boolExp
+                       let isKeyDuplicated x = if isMember k x left || isMember k x left then keyDuplicated k
+                                               else  return x
                        if b then do
                                     -- Evaluar
                                     vals <- sequence $ map (\e -> evalIntExp [n] e) numExps
@@ -223,8 +226,10 @@ update' fields numExps sch n boolExp ref key nulls =
                                     resolCascades ys ys' k (mapT (funMap2 nulls vals' k reg)) reg
                                     resolNull zs zs' k reg
                                     -- Mapear
-                                    return $ mapWithKey (funMap nulls vals') reg
-                       else retOk reg
+                                    let reg' = mapWithKey (funMap nulls vals') reg
+                                    isKeyDuplicated reg'
+
+                       else isKeyDuplicated reg
 
                           -- Actualiza el valor del atributo k
                     where funMap nulls vals k v = case lookup k vals of
@@ -235,6 +240,7 @@ update' fields numExps sch n boolExp ref key nulls =
                           funMap2 nulls vals k x y = case comp2 k x y of
                                                     EQ -> mapWithKey (funMap nulls vals) y
                                                     _ -> y
+                --checkReferences
 
 
 -- Separa una lista de tablas, clasificandolas segun sus opciones de referencia
@@ -279,8 +285,8 @@ insertCola (n,x) [] = [(n,x)]
 insertCola (n,x) c@((n',x'):xs) = if n < n' then (n',x'): (insertCola (n,x) xs)
                                   else (n,x):c
 
--- Convierte un árbol de consulta en una cola para poder hacer una ejecucion secuencial
--- de los comandos en un orden dado
+-- Convierte un árbol de consulta en una cola de operaciones de álgebra relacional
+-- para poder hacer una ejecucion secuencial de los comandos en un orden dado
 conversion :: DML ->  Cola AR
 conversion (Union d1 d2) = let (a1,a2) = conversion d1 ||| conversion d2
                            in [(0,Uni a1 a2)]
@@ -411,7 +417,7 @@ runQuery'  ((_,Pi unique args):rs) =
                             ([],_) ->   do -- Caso sin funciones de agregado
                                             tabTypes <- askTypes
                                             Q(\c -> return $ fmap (\x -> (c,x)) $ checkTypedExpList names tabTypes args)
-                                            t <- ioEitherMapT (proy names args) (isNull tables) -- Aplicar proyecciones
+                                            t <- ioEitherMapT (\reg _ _ -> proy names args reg) (isNull tables) -- Aplicar proyecciones
                                             let newFields = toFieldName fields args    -- Obtener strings para imprimir de atributos solicitados
                                             let newTabName = foldl (++) "" names
                                             tabVals <- askVals
@@ -650,13 +656,13 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
 
                                                        let fs2' = map (\f -> if f `elem` fs then f
                                                                              else f//n2) fs2
-                                                       t' <- ioEitherMapT (mapFun eval fs2') t
+                                                       t' <- ioEitherMapT (\reg _ _ -> mapFun eval fs2' reg) t
                                                        collapseContext nn ns fs
                                                        return (nn,fs,t')
                                            JRight -> do (n1,fs1,_) <- prod' arg1
                                                         let fs1' = map (\f -> if f `elem` fs then f
                                                                               else f//n2) fs1
-                                                        t' <- ioEitherMapT (mapFun eval fs1') t
+                                                        t' <- ioEitherMapT (\reg _ _ -> mapFun eval fs1' reg) t
                                                         collapseContext nn ns fs
                                                         return (nn,fs,t')
 

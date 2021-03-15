@@ -1,7 +1,6 @@
-CREATE USER alfredo rincon;
-SELECT USER alfredo rincon;
-CREATE DATABASE Libreria;
-USE Libreria;
+DROP TABLE IF EXISTS `Escribe`;
+DROP TABLE IF EXISTS `Autor`;
+DROP TABLE IF EXISTS `Libro`;
 
 
 
@@ -32,7 +31,7 @@ CREATE TABLE Escribe (
     PRIMARY KEY (Id, Isbn, Año),
     FOREIGN KEY (Id) REFERENCES Autor (Id),
     FOREIGN KEY (Isbn) REFERENCES Libro (Isbn)
-    ON DELETE CASCADE
+    ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 
@@ -72,7 +71,3 @@ INSERT INTO Escribe (Id, Isbn, Año)
     VALUES (5, "0004", '1995-1-1');
 INSERT INTO Escribe (Id, Isbn, Año)
     VALUES (6, "0005", '1998-1-1');
-
-
-
-

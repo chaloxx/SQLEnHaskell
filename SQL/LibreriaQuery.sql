@@ -13,6 +13,21 @@ UPDATE Libro SET
       WHERE Editorial = "UNR";
 */
 
-
+/*
 DELETE Libro
 	WHERE EXISTS (SELECT ALL FROM Escribe WHERE Libro.Isbn = Escribe.Isbn AND Año = 1998-1-1);
+*/
+
+/*Borra tanto las filas de Escri*/
+/*
+DELETE Escribe WHERE Id = 6
+*/
+
+
+/*
+DELETE Libro WHERE Precio = 800
+*/
+
+
+/*Error clave duplicada*/
+UPDATE Libro SET Isbn = "00010" WHERE Editorial = "UNR"

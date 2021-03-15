@@ -15,8 +15,10 @@ Ejecutar install.sh. Se instalarán las librerías necesarias y se compilará el
 
 Forma de uso:
 ------------
-Una vez compilado el programa basta correrlo usando ./Init. En el directorio SQL se proporcionan ejemplos de su uso.
-Advertencia: Los nombres de scripts que terminan con MySql deben ser ejecutados usando este dbms. Fueron usados para
+Una vez compilado el programa basta correrlo usando ./Init. En el directorio SQL se proporcionan ejemplos de comandos.
+Para correr los ejemplos dentro de SQL se puede usar el comando SOURCE, por ejemplo para correr el script Inmobiliaria.sql,
+desde la línea de comando se corre 'SOURCE "SQL/Inmobiliaria.sql"'.
+Los nombres de scripts que terminan con MySql deben ser ejecutados usando este dbms. Fueron usados para
 corroborar resultados.
 
 
@@ -43,3 +45,18 @@ Decisiones de diseño:
  *) Representar tablas con árboles AVL  y registros con Diccionarios.
  *) Almacenar tablas de forma persistente como módulos haskell y cargarlos dinámicamente.
  *) Almacenar un estado usando una mónada.
+ *) Modelar el uso de claves foráneas.
+
+
+ Uso de código de terceros:
+---------------------------
+*) Para implementar la carga dinámica de módulos se usó el siguiente ejemplo:
+https://purelyfunctional.org/posts/2016-05-20-dynamic-loading-haskell-module.html
+*) El módulo Avl se descargó de la hackage (AvlTree-4.2) y fue modificado.
+*) COrdering también se descargó de la hackage (COrdering-2.3) y fue modificado.
+
+
+
+
+
+ Falto implementar union, diferencia e intersección entre consultas.

@@ -5,6 +5,7 @@ import Prelude hiding (lookup,fail)
 import Data.Typeable
 import Avl ((|||),isMember)
 import Data.Either
+import Data.List (intercalate)
 
 printError :: String -> IO ()
 printError msg = error msg
@@ -96,6 +97,8 @@ baseExist b = put $ "Ya existe la base " ++ b
 baseNotExist b = "No existe la base " ++ b
 
 notLog = put "No estás logueado"
+
+keyDuplicated k = retFail $ "La clave " ++ intercalate "," k ++ " está duplicada"
 
 invalidData = put "Los datos son incorrectos"
 

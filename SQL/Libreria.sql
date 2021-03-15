@@ -1,4 +1,6 @@
+CREATE USER pablo alonso;
 SELECT USER pablo alonso;
+CREATE DATABASE Libreria;
 USE Libreria;
 DROP ALL TABLE;
 
@@ -34,7 +36,6 @@ CREATE TABLE Escribe (
 );
 
 
-/*Ej3:*/
 INSERT Autor ("Damian", "Ariel", "Argentina", "Rosario",1);
 INSERT Autor ("Pablo", "Luis", "Argentina", "Venado",2);
 INSERT Autor ("Abelardo", "Castillo", "Argentina", "Rosario",3);
@@ -53,19 +54,3 @@ INSERT  Escribe (2000-1-1,4, "0001");
 INSERT  Escribe (1897-1-1,5, "0002");
 INSERT  Escribe (1995-1-1,5, "0004");
 INSERT  Escribe (1998-1-1,6, "0005");
-
-
-/*Ej4 c:*/
-/*
-UPDATE Libro INNER JOIN Escribe ON Libro.Isbn = Escribe.Isbn INNER JOIN Autor ON Escribe.Id = Autor.Id SET
-    Precio = CASE
-                 WHEN (Nacionalidad <> "Argentina" AND Precio < 200) THEN Precio + (Precio/5)
-                 WHEN (Nacionalidad <> "Argentina" AND Precio >= 200) THEN Precio + (Precio/10)
-             END;
-*/
-
-/*Ej4 d:*/
-/*
-DELETE FROM Libro
-	WHERE EXISTS (SELECT * FROM Escribe WHERE Libro.Isbn = Escribe.Isbn AND Año = '1998-1-1');
-*/

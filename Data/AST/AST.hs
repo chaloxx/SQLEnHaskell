@@ -276,11 +276,11 @@ ioEitherFilterT f t = do b <- f (value t)
 
 
 -- Mapea un árbol
-ioEitherMapT :: (e -> Query b) -> AVL e -> Query (AVL b)
+ioEitherMapT :: (e -> AVL b -> AVL b -> Query b) -> AVL e -> Query (AVL b)
 ioEitherMapT f E = return E
 ioEitherMapT f t = do l' <- ioEitherMapT f (left t)
                       r' <- ioEitherMapT f (right t)
-                      v <- f $ value t
+                      v <- f (value t) l' r'
                       return $ case t of
                                (N _ _ _) -> N l' v r'
                                (Z _ _ _) -> Z l' v r'
@@ -333,6 +333,7 @@ type ErrorMsg = String
 type ContextFun a = HM.HashMap TableName (HM.HashMap FieldName a)
 type Context = (Env,ContextFun Args,ContextFun Type)
 
+
 -- Sinonimos
 type TableName = String
 type TableNames = [TableName]
@@ -343,7 +344,7 @@ type Symbol = String
 type Cola a = [(Int,a)]
 type Distinct = Bool
 type UserName = String
-
+type Password = String
 -- Definimos una answer como una respuesta a una consulta
 -- Consta de 4 componentes:
 -- Un booleano para diferenciar si la consulta incluye una claúsula group by (requiere un tratamiento especial)
