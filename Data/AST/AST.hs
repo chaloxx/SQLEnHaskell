@@ -362,7 +362,7 @@ type TabsInfo = AVL (HM.HashMap FieldName TableInfo)
 type TabsUserInfo = AVL (HM.HashMap FieldName UserInfo)
 
 -- Descripción de la tabla (columnas,tipos,keys,foreing keys)
-type TableDescript = ([String],[Type],[String],[String],ForeignKey)
+type TableDescript = (FieldNames,[Type],[String],Key,[ForeignKey])
 
 
 
@@ -374,16 +374,19 @@ type TableDescript = ([String],[Type],[String],[String],ForeignKey)
 -- TT : Tipo de cada columna
 -- TK : clave primaria
 -- Env : Tabla referenciada, clave foránea
--- TR : Tabla por la que es referenciada, opción de delete, opción de update
+-- TR : A que tabla se hace referencia, atributos
+-- TFK : Que tabla hace referencia a esta tabla
 -- HN : Lista de campos que admiten valores nulos
 data TableInfo = TO String | TN String | TS [String] | TT [Type]|  TK [String]
-                   | TFK [(String,[(String,String)])] | TR [Reference] | HN [String]
+                   | TFK [ForeignKey] | TR [(TableName,[(FieldName,FieldName)])] | HN [String]
                    | TB String deriving (Show,Eq,Ord)
 
 
 -- Clave foránea
-type ForeignKey = [(String,[(String,String)],RefOption,RefOption)]
-type Reference = (String,RefOption,RefOption)
+-- A que tabla se hace referencia, con que atributos y con q opciones de borrado y actualización
+type ForeignKey = (TableName,[(FieldName,FieldName)],RefOption,RefOption)
+-- Que tabla hace referencia a la tabla actual, con que atributos y con que opciones de borrado y actualización
+type Reference = (String,[(FieldName,FieldName)],RefOption,RefOption)
 
 -- Tipos de datos
 data Type = String | Int | Float | Bool | Datetime | Date | Time | TNulo  deriving (Show,Eq,Ord)
@@ -665,7 +668,7 @@ createInfoRegister :: Env -> HM.HashMap String TableInfo
 createInfoRegister e =  HM.fromList $ zip fields0 [TO (name e), TB (dataBase e)]
 
 
-createInfoRegister2 :: Env -> String -> HM.HashMap String TableInfo
+createInfoRegister2 :: Env -> TableName -> HM.HashMap String TableInfo
 createInfoRegister2 e n =  (createInfoRegister e) `HM.union` (HM.singleton "tableName" (TN n))
 
 

@@ -42,7 +42,7 @@ comp (k:ks) x y =  let (v1,v2) =  (lookup k x,lookup k y) in
                                                      LT -> Lt
                                                      GT -> Gt
                                                      EQ -> comp ks x y
-                else error "Error fatal"
+                  else error $ "No pudo encontrar " ++ k
 
 -- Compara 2 registros (devuelve un Ordering)
 comp2 :: Ord v => [String] -> HashMap String v -> HashMap String v -> Ordering

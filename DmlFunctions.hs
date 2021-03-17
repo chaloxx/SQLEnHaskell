@@ -39,13 +39,13 @@ insert :: TableName -> AVL ([Args]) ->  Query ()
 insert n entry = do e <- askEnv
                     let (r,u) = (url e)||| name e
                     -- Calcular metadata
-                    [TS scheme,TT types,TK k, TFK fk, HN nulls] <- loadInfoTable ["scheme","types","key","fkey","haveNull"] e n :: Query [TableInfo]
+                    [TS scheme,TT types,TK k, TR ref, HN nulls] <- loadInfoTable ["scheme","types","key","refBy","haveNull"] e n :: Query [TableInfo]
                     t <- obtainTable r n :: Query Tab
-                    insert' e (r++"/"++n) types scheme nulls k t entry fk
+                    insert' e (r++"/"++n) types scheme nulls k t entry ref
 
 -- Segundo nivel de insertar
 insert' _ _ _ _ _ _ _ E _= return ()
-insert' e r types scheme nulls k t entry fk =
+insert' e r types scheme nulls k t entry ref =
                                   do --Nro de argumentos recibidos
                                        let l = length scheme
                                        let dbPath = url e
@@ -53,7 +53,7 @@ insert' e r types scheme nulls k t entry fk =
                                        fkInfo <- sequence $ map  (\(tabName,refs) -> do table <- obtainTable dbPath tabName
                                                                                         [TK key] <- loadInfoTable ["key"] e tabName
                                                                                         return (refs,table,key))
-                                                                                        fk
+                                                                                        ref
                                        -- Separar entradas válidas de las inválidas a tráves de distintos chequeos
                                        let (t1,t2) = particionT2 (checks l e types scheme nulls k t fkInfo) (\x -> fromList $ zip scheme x) entry
                                        -- Filtrar entradas con claves repetidas
@@ -96,15 +96,16 @@ delete n exp = do e <- askEnv
                   let r = url  e
                   let u = name e
                   t <- obtainTable r n
-                  [TK k,TR ref, TT types ,TS scheme] <- loadInfoTable ["key","refBy","types","scheme"] e n :: Query [TableInfo]
+                  [TK k,TFK fk, TT types ,TS scheme] <- loadInfoTable ["key","fkey","types","scheme"] e n :: Query [TableInfo]
                   let tabTypes = singleton n $ fromList $ zip scheme types
                   let tabVals = singleton n $ fromList $ map (\f -> (f,Nulo)) scheme
                   updateTypes tabTypes
                   updateVals tabVals
-                  let (xs,ys,zs) =  partRefDel  ref
-                  xs' <- obtainTableList xs -- tablas que tienen una referencia de tipo restricted sobre t'
-                  ys' <- obtainTableList ys -- tablas que tienen una referencia de tipo cascades sobre t'
-                  zs' <- obtainTableList zs -- tablas que tienen una referencia de tipo nullifies sobre t'
+                  fromIO $ put "Aca entra"
+                  let (xs,ys,zs) =  partRefDel  fk
+                  xs' <- obtainTableList [n |(n,_) <- xs] -- tablas que tienen una referencia de tipo restricted sobre t'
+                  ys' <- obtainTableList [n |(n,_) <- ys] -- tablas que tienen una referencia de tipo cascades sobre t'
+                  zs' <- obtainTableList [n |(n,_) <-zs] -- tablas que tienen una referencia de tipo nullifies sobre t'
                   t' <- ioEitherFilterT (predic k n xs xs' ys ys' zs zs') t
                   Q(\c -> do reWrite t' $ r ++ n
                              return $ Right (c,()))
@@ -117,58 +118,65 @@ delete n exp = do e <- askEnv
               -- Evaluar expresión booleana
               b <- evalBoolExp [n] exp
               if not b then retOk True
-              else do resolRestricted xs xs' k reg
-                      resolCascades ys ys' k  (filterT (predic2 k reg))  reg -- Si la restricción es cascades borrar todos los registros que apunten a reg
-                      resolNull zs zs' k reg -- Si la restricción es nullifies nulificar todos los registros que apunten a reg (si aceptan nulos)
+              else do resolRestricted xs xs' reg
+                      resolCascades ys ys' (\fields r -> filterT (predic2 fields r))  reg -- Si la restricción es cascades borrar todos los registros que apunten a reg
+                      resolNull zs zs' reg -- Si la restricción es nullifies nulificar todos los registros que apunten a reg (si aceptan nulos)
                       retOk False
 
                      -- Filtro simple (evalúa igualdad entre registros)
-               where predic2 k x y = case comp k x y of
-                                     Eq _ -> False
-                                     _ -> True
+               where predic2 k x y =  case comp k x y of
+                                       Eq _ -> False
+                                       _ -> True
 
          -- Separar las restricciones de cada tabla
          partRefDel [] = ([],[],[])
-         partRefDel ((x,v,_):r) =  let (xs,ys,zs) = partRefDel r in
-                                   case  v of
-                                     Restricted -> (x:xs,ys,zs)
-                                     Cascades -> (xs, x:ys, zs)
-                                     Nullifies -> (xs,ys,x:zs)
+         partRefDel ((x,fs,v,_):r) =  let (xs,ys,zs) = partRefDel r in
+                                      case  v of
+                                        Restricted -> ((x,fs):xs,ys,zs)
+                                        Cascades -> (xs, (x,fs):ys, zs)
+                                        Nullifies -> (xs,ys,(x,fs):zs)
 
 
 
 -- Determina si los atributos k (clave primaria) son clave foránea en una lista de tablas
-resolRestricted :: [String] -> [Tab] -> [String] -> Reg -> Query ()
-resolRestricted _ [] _ _ = return ()
-resolRestricted (n:ns) (t:ts) k x = if isMember k x t then errorRestricted x n
-                                    else resolRestricted ns ts k x
+resolRestricted :: [(TableName,[(FieldName,FieldName)])] -> [Tab] -> Reg -> Query ()
+resolRestricted _ [] _ = return ()
+resolRestricted ((n,fk):ns) (t:ts)  reg = let (for,local) = unzip fk
+                                              reg' = fromList $ zip for  $ map (\s -> reg!s) local
+                                          in if isMember for reg' t then errorRestricted reg n
+                                             else resolRestricted ns ts reg
 
 
 -- Esparce borrado o modificación sobre los registros cuya clave foránea es k de una lista de tablas
-resolCascades :: TableNames -> [Tab] -> FieldNames -> (Tab -> Tab) -> Reg -> Query ()
-resolCascades  _ [] _ _  _ = return ()
-resolCascades (n:ns) (t:ts) k f x = do  e <- askEnv
-                                        let (t',r) =  f t ||| url' e n
-                                        fromIO $  reWrite t' r
-                                        resolCascades ns ts k f x
+resolCascades :: [(TableName,[(FieldName,FieldName)])] -> [Tab] -> (FieldNames -> Reg -> Tab -> Tab) -> Reg -> Query ()
+resolCascades  _ [] _ _ = return ()
+resolCascades ((n,fk):ns) (t:ts)  f reg = let (for,local) = unzip fk
+                                              reg' = fromList $ zip for  $ map (\s -> reg!s) local
+                                          in do  e <- askEnv
+                                                 let (t',r) =  f for reg' t ||| url' e n
+                                                 fromIO $  reWrite t' r
+                                                 resolCascades ns ts f reg
 
 
 
 -- Convierte a Nulo los valores de las claves foráneas k de una lista de tablas
-resolNull :: [String] -> [Tab] -> [String] -> Reg -> Query ()
-resolNull _ [] _ _ = return ()
-resolNull (n:ns) (t:ts) k x = do e <- askEnv
-                                 let (t',r) = mapT (fun k x) t ||| url' e n
-                                 fromIO $ reWrite t' r
-                                 resolNull ns ts k x
+resolNull ::  [(TableName,[(FieldName,FieldName)])]  -> [Tab] -> Reg -> Query ()
+resolNull _ [] _ = return ()
+resolNull ((n,fk):ns) (t:ts) reg = let (for,local) = unzip fk
+                                       reg' = fromList $ zip for  $ map (\s -> reg!s) local
+                                   in do e <- askEnv
+                                         let (t',r) = mapT (fun for reg') t ||| url' e n
+                                         fromIO $ reWrite t' r
+                                         resolNull ns ts reg
 
               -- Comparar igualdad entre los valores de los atributos k
-        where fun k x y = case comp2 k x y of
-                           EQ -> fun2 k y
-                           _ -> y
+        where fun for x y = case comp2 for x y of
+                              EQ -> mapWithKey (fun2 for) y
+                              _ -> y
               -- Volver Nulos los valores de los atributos k
-              fun2 [] y = y
-              fun2 (k:ks) y = fun2 ks (updateHM (\x -> Just $ Nulo) k y)
+              fun2 for k v = if k `elem` for then Nulo
+                             else v
+
 
 
 
@@ -176,20 +184,19 @@ resolNull (n:ns) (t:ts) k x = do e <- askEnv
 -- Actualizar tabla n (primer nivel)
 update :: String -> ([String],[Args]) -> BoolExp -> Query ()
 update n (fields,numExps) exp = do e <- askEnv
-                                   [TS sch,TT typ,TR ref,TK key,HN nulls] <- loadInfoTable ["scheme","types","refBy","key","haveNull"] e n -- cargar esquemas y tipos
+                                   [TS sch,TT typ,TFK fk,TK key,HN nulls] <- loadInfoTable ["scheme","types","refBy","key","haveNull"] e n -- cargar esquemas y tipos
                                    let tabTypes = singleton n $ fromList $ zip sch typ
                                    let tabVals = singleton n $ fromList $   map (\f -> (f,Nulo)) sch
                                    updateVals tabVals
                                    updateTypes tabTypes
-                                   update'  fields numExps sch n exp ref key nulls
+                                   update'  fields numExps sch n exp fk key nulls
 
 -- Actualizar tabla (segundo nivel)
-update' fields numExps sch n boolExp ref key nulls =
+update' fields numExps sch n boolExp fk key nulls =
   let setKeys = toSet key
       setFields = toSet fields
       setScheme = toSet sch in
       -- Chequear que los atributos modificados están dentro del esquema y que ninguno es parte de la clave primaria
-      -- || S.intersection setKeys setFields /= S.empty
       if not $ S.isSubsetOf setFields setScheme  then errorUpdateFields fields
       else do  tabTypes <- askTypes
                Q (\c -> return $ do-- -- chequear tipos de expresiones numéricas y expresión booleana
@@ -199,32 +206,36 @@ update' fields numExps sch n boolExp ref key nulls =
                e <- askEnv
                let r = url e
                t <- obtainTable r n -- cargar tabla
-               let (xs,ys,zs) = partRefTable ref
-               xs' <- obtainTableList xs
-               ys' <- obtainTableList ys
-               zs' <- obtainTableList zs
-               t' <- ioEitherMapT (updateValue nulls key n boolExp fields numExps xs xs' ys ys' zs zs' ) t
+               let (xs,ys,zs) = partRefTable fk
+               xs' <- obtainTableList [n |(n,_) <- xs]
+               ys' <- obtainTableList [n |(n,_) <- ys]
+               zs' <- obtainTableList [n |(n,_) <- zs]
+               -- Primera pasada no chequear referencias, falla si hay clave duplicada, si no falla hacer segunda pasada
+               ioEitherMapT (updateValue nulls key n boolExp fields numExps xs xs' ys ys' zs zs' False ) t
+               -- Segunda pasada, chequear referencias porque ahora no hay clave duplicada
+               t' <- ioEitherMapT (updateValue nulls key n boolExp fields numExps xs xs' ys ys' zs zs' True ) t
                Q(\c -> do reWrite t' $ r ++ n
                           return $ Right (c,()))
 
                  -- Función para modificar valores en registro x
            where toSet = S.fromList
                  -- Función para modificar los valores de aquellos registros para los cuales exp es un predicado válido
-                 updateValue nulls k n boolExp fields numExps xs xs' ys ys' zs zs' reg left right =
+                 updateValue nulls k n boolExp fields numExps xs xs' ys ys' zs zs' checkReference reg left right =
                     do let r = singleton n reg
                        -- Evaluar expresion booleana
                        updateVals $ singleton n reg
                        b <- evalBoolExp [n] boolExp
-                       let isKeyDuplicated x = if isMember k x left || isMember k x left then keyDuplicated k
+                       let isKeyDuplicated x = if isMember k x left || isMember k x right then keyDuplicated k
                                                else  return x
                        if b then do
                                     -- Evaluar
                                     vals <- sequence $ map (\e -> evalIntExp [n] e) numExps
                                     let vals' = fromList $  zip fields vals
                                     -- Chequear inconsistencias con referencias
-                                    resolRestricted xs xs' k reg
-                                    resolCascades ys ys' k (mapT (funMap2 nulls vals' k reg)) reg
-                                    resolNull zs zs' k reg
+                                    if checkReference then do resolRestricted xs xs' reg
+                                                              resolCascades ys ys' (\f r -> mapT (funMap2 nulls vals' f r)) reg
+                                                              resolNull zs zs' reg
+                                    else return ()
                                     -- Mapear
                                     let reg' = mapWithKey (funMap nulls vals') reg
                                     isKeyDuplicated reg'
@@ -240,16 +251,16 @@ update' fields numExps sch n boolExp ref key nulls =
                           funMap2 nulls vals k x y = case comp2 k x y of
                                                     EQ -> mapWithKey (funMap nulls vals) y
                                                     _ -> y
-                --checkReferences
+
 
 
 -- Separa una lista de tablas, clasificandolas segun sus opciones de referencia
 partRefTable [] = ([],[],[])
-partRefTable ((x,_,v):r) =   let (xs,ys,zs) = partRefTable r in
-                           case  v of
-                            Restricted -> (x:xs,ys,zs)
-                            Cascades -> (xs, x:ys, zs)
-                            Nullifies -> (xs,ys,x:zs)
+partRefTable  ((x,fs,_,v):r) =  let (xs,ys,zs) = partRefTable r in
+                                case  v of
+                                 Restricted -> ((x,fs):xs,ys,zs)
+                                 Cascades -> (xs, (x,fs):ys, zs)
+                                 Nullifies -> (xs,ys,(x,fs):zs)
 
 -- Toma una lista de nombres de tabla y devuelve una lista de tablas
 obtainTableList :: [TableName] -> Query [Tab]

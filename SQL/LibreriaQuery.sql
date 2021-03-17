@@ -30,4 +30,7 @@ DELETE Libro WHERE Precio = 800
 
 
 /*Error clave duplicada*/
-UPDATE Libro SET Isbn = "00010" WHERE Editorial = "UNR"
+/*UPDATE Libro SET Isbn = "00010" WHERE Editorial = "UNR"*/
+
+
+UPDATE Libro SET Isbn = "00010" WHERE Titulo = "Dracula"

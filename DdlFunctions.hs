@@ -112,7 +112,7 @@ fun reg x = fstByCC (\z1 z2 -> comp2 ["userName"] z1 z2 ) reg x
 
 
 
-createTable :: Env -> String -> [CArgs]  -> IO ()
+createTable :: Env -> TableName -> [CArgs]  -> IO ()
 createTable e n c =
  do res <- unWrapperQuery e $ obtainTable syspath "Tables"
     case res of
@@ -141,7 +141,7 @@ createTable e n c =
                                                               d2 <- d1 `deepseq` writeFile hs $ code n q
                                                               d2 `deepseq` compile hs
                                                               removeFile $ r ++ ".hi"
-                                                              let t' = tree reg [TS scheme,TT types,TK k,TFK (splitFK fk), TR [],HN nulls]
+                                                              let t' = tree reg [TS scheme,TT types,TK k,TFK [] , TR (splitFK fk),HN nulls]
                                                               d3 <- appendLine tablepath t'
                                                               d3 `deepseq` succesCreateTable n
 
@@ -160,7 +160,7 @@ createTable e n c =
 
 
 -- Crear referencias
-createReference :: String -> Env -> ForeignKey -> IO ()
+createReference :: TableName -> Env -> [ForeignKey] -> IO ()
 createReference _ _ [] = return ()
 createReference n e ((x,xs,o1,o2):ys) =
   do res <- unWrapperQuery e $ obtainTable syspath "Tables"
@@ -168,15 +168,15 @@ createReference n e ((x,xs,o1,o2):ys) =
       Left msgError -> put msgError
       Right t ->  do let reg = createInfoRegister2 e  x
                      -- Reemplaza en el árbol t el registro correspondiente
-                     let t' = write  (fun (n,o1,o2) fields reg) t
+                     let t' = write  (fun (n,xs,o1,o2) fields reg) t
                      reWrite t' tablepath
                      succesCreateReference n x
                      createReference n e ys
 
   where -- Función para actualizar el registro correspondiente en la tabla referenciada
-        fun m k r1 r2  = case comp k r1 r2 of
-                            Eq y -> let f (TR l) = Just $ TR $ m:l
-                                        in Eq $ update f "refBy" y
+        fun fk k r1 r2  = case comp k r1 r2 of
+                            Eq y -> let f (TFK l) = Just $ TFK $ fk:l
+                                        in Eq $ update f "fkey" y
                             y -> y
 
 
@@ -206,9 +206,9 @@ dropTable e n = do res <- unWrapperQuery e $ obtainTable "DataBase/system/" "Tab
                      Right t -> do inf <- unWrapperQuery e $ loadInfoTable ["refBy","fkey"] e n
                                    case inf of
                                     Left msgError -> put msgError
-                                    Right [TR refBy, TFK fkey] -> -- Si existen tablas que hagan referencia a n no se puede eliminar
-                                                                 if refBy /= [] then imposibleDelete n [x | (x,_,_) <- refBy]
-                                                                 else dropTable' [x | (x,_) <- fkey] e n t
+                                    Right [TR ref,TFK fkey] -> -- Si existen tablas que hagan referencia a n no se puede eliminar
+                                                                if fkey /= [] then imposibleDelete n [x | (x,_,_,_) <- fkey]
+                                                                else dropTable' [x | (x,_) <- ref] e n t
 
  where
   -- segundo nivel de dropTable
@@ -237,10 +237,10 @@ removeReferences e t n (x:xs) = let reg = fromList $ zip fields [TO (name e), TB
                         other -> other
           -- modificar lista en hashmap de r2
           change x r2 = alter (change' x) "refBy" r2
-          change' x (Just (TR l)) = Just $ TR [(a,b,c) | (a,b,c) <- l, a /= x]
+          change' x (Just (TFK l)) = Just $ TFK [(a,b,c,d) | (a,b,c,d) <- l, a /= x]
 
 
--- Procesa las columnas para separar la información pertinente
+-- Procesa las columnas para separar la información
 collect :: [CArgs] -> TableDescript
 collect [] = ([],[],[],[],[])
 collect((Col n t hn):xs) = let (l1,l2,l3,k,fk) = collect xs

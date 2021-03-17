@@ -41,7 +41,7 @@ checkKey t k r x = if isMember k r t then errorKey x
                    else return ()
 
 --- Chequear que las referencias sean válidas
-checkReference :: Env ->  ForeignKey -> HashMap String Type ->  Query Bool
+checkReference :: Env ->  [ForeignKey] -> HashMap String Type ->  Query Bool
 checkReference _  [] _  =  return True
 checkReference e  ((x,xs,o1,o2):ys) t1 = do res <- loadInfoTable ["key","types","scheme"] e x
                                             case res of
@@ -62,7 +62,7 @@ checkReference e  ((x,xs,o1,o2):ys) t1 = do res <- loadInfoTable ["key","types",
 
 
 -- Chequea que no se aplique la restricción nullifies sobre campos que no permiten nulos
-checkNullifies :: [String] -> ForeignKey -> Bool
+checkNullifies :: [String] -> [ForeignKey] -> Bool
 checkNullifies _ [] = error "Por aca sale"
 checkNullifies nulls ((_,l,Nullifies,_):xs) = checkNullifies' nulls [x | (x,_) <- l] xs
 checkNullifies nulls ((_,l,_,Nullifies):xs) = checkNullifies' nulls [x | (x,_) <- l] xs
