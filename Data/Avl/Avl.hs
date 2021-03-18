@@ -159,6 +159,18 @@ particionT p t = let ((l1,l2),(r1,r2)) = particionT p (left t) ||| particionT p 
                       False -> (pushL (value t) t1,t2)
 
 
+-- Partir un árbol en 2  con transformaciones
+particionT2 :: (a -> Either c ()) -> (a -> b) -> AVL a -> (AVL c,AVL b)
+particionT2 p f E = (E,E)
+particionT2 p f t =  let  (l1,l2) = particionT2 p f (left t)
+                          (r1,r2) = particionT2 p f (right t)
+                          l = join l1 r1
+                          r = join l2 r2
+                          x = value t
+                      in  case p x of
+                            Left errorMsg  -> (pushL errorMsg l,r)
+                            _  -> ( l, pushL (f x) r)
+
 
 
 

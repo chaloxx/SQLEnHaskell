@@ -101,7 +101,6 @@ delete n exp = do e <- askEnv
                   let tabVals = singleton n $ fromList $ map (\f -> (f,Nulo)) scheme
                   updateTypes tabTypes
                   updateVals tabVals
-                  fromIO $ put "Aca entra"
                   let (xs,ys,zs) =  partRefDel  fk
                   xs' <- obtainTableList [n |(n,_) <- xs] -- tablas que tienen una referencia de tipo restricted sobre t'
                   ys' <- obtainTableList [n |(n,_) <- ys] -- tablas que tienen una referencia de tipo cascades sobre t'
@@ -277,7 +276,7 @@ obtainTableList (x:xs) = do e <- askEnv
 
 
 -- Función para obtener valor de variables de tupla
-obtainValue :: [String] -> Args -> ContextFun Args -> Args
+obtainValue :: FieldNames -> Args -> ContextFun Args -> Args
 obtainValue s (Field v) r = case lookupList r s v of
                               Right x -> x
                               _ -> error "ObtainValue error"
@@ -540,7 +539,7 @@ runQuery' ((_,Group args):xs) = do (_,ns,fields,[t]) <- runQuery' xs
                                    return (True,ns,ls ,ts)
 
 
-
+-- Filtra grupos
 runQuery' ((_,Hav exp):xs) = do (groupBy,names,fields,tables) <- runQuery' xs
                                 if not groupBy then errorHav
                                 else do  tabTypes <- askTypes
@@ -649,7 +648,7 @@ prod' (Subquery s) = let c = conversion s
 
 
 prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
-                                  (_,ns,fs,[t]) <- runQuery' [(1,Prod ts)]
+                                  (_,ns,fs,[t]) <- runQuery' [(1,Prod ts)] -- Hacer producto de las 2 tablas a joinear
                                   if length ns /= 2 then retFail "Error en join"
                                   else do tabTypes <- askTypes
                                           tabNames <- giveMeTableNames
@@ -660,20 +659,20 @@ prod' (Join j arg1 arg2 exp) = do let ts = [arg1,arg2]
                                           let [n1,n2] = ns
                                           let nn = n1++"Join"++n2
                                           case j of
-                                           Inner -> do  t' <- ioEitherFilterT eval t
+                                           Inner -> do  t' <- ioEitherFilterT eval t -- Filtrar evaluando una bool exp
                                                         collapseContext nn ns fs
                                                         return (nn,fs,t')
                                            JLeft -> do (n2,fs2,_) <- prod' arg2
 
                                                        let fs2' = map (\f -> if f `elem` fs then f
                                                                              else f//n2) fs2
-                                                       t' <- ioEitherMapT (\reg _ _ -> mapFun eval fs2' reg) t
+                                                       t' <- ioEitherMapT (\reg _ _ -> mapFun eval fs2' reg) t -- Mapear a null campos de la tabla der para los cuales boolexp es false
                                                        collapseContext nn ns fs
                                                        return (nn,fs,t')
                                            JRight -> do (n1,fs1,_) <- prod' arg1
                                                         let fs1' = map (\f -> if f `elem` fs then f
                                                                               else f//n2) fs1
-                                                        t' <- ioEitherMapT (\reg _ _ -> mapFun eval fs1' reg) t
+                                                        t' <- ioEitherMapT (\reg _ _ -> mapFun eval fs1' reg) t -- Mapear a null campos de la tabla der para los cuales boolexp es false
                                                         collapseContext nn ns fs
                                                         return (nn,fs,t')
 
@@ -955,8 +954,6 @@ evalBoolExp s (Like f p) = do tabTypes <- askTypes
                                     else False
         findPattern _ _ = False
 
-
-evalBoolExp _ exp = error $ show exp
 
 applyEval:: TableNames -> BoolExp -> BoolExp -> (Bool -> Bool -> Bool) -> Query Bool
 applyEval s exp1 exp2 op = do b1 <-  evalBoolExp s exp1

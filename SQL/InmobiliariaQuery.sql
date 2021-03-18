@@ -88,7 +88,7 @@ WHERE  Persona.codigo = PrefiereZona.codigo_cliente AND
 
 
 /*g1*/
-/*
+
 SELECT Persona.nombre, Persona.apellido, Inmueble.codigo, Inmueble.nombre_zona, Inmueble.precio
 FROM   Persona, PrefiereZona AS PZ, Limita, Inmueble
 WHERE  Persona.codigo = PZ.codigo_cliente AND
@@ -102,7 +102,7 @@ WHERE  Persona.codigo = PZ.codigo_cliente AND
        Inmueble.nombre_poblacion = Limita.nombre_poblacion AND
        Inmueble.nombre_zona = Limita.nombre_zona) AND
        Persona.codigo IN (1001,1011,1013)
-*/
+
 
 /*Esta subconsulta devuelve 1001,1011 y 1013 */
 /*g2*/
@@ -117,7 +117,7 @@ SELECT codigo FROM Cliente WHERE NOT EXISTS (SELECT ALL FROM PrefiereZona AS PZ2
 */
 
 
-
+/*
 SELECT SUM(precio),nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion;
 SELECT SUM(precio),nombre_poblacion,nombre_zona FROM Inmueble GROUP BY nombre_poblacion,nombre_zona;
 SELECT nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion;
@@ -141,11 +141,11 @@ SELECT max,maxDiv3 FROM SELECT MAX(precio) AS max , MAX(precio)/3 AS maxDiv3 FRO
 SELECT COUNT(direccion) AS count AS total FROM Inmueble GROUP BY nombre_poblacion HAVING AVG(superficie) > 100.0;
 SELECT ALL FROM Limita WHERE nombre_poblacion_2 LIKE "Ros%";
 SELECT COUNT(precio),nombre_poblacion FROM Inmueble GROUP BY nombre_poblacion;
-SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 10:00:00;
+SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 10:00:00;*/
 /*SELECT ALL FROM Visitas WHERE fecha_hora < 2014-10-15 ;*//*Error de tipo*/
-SELECT ALL FROM Visitas LIMIT 50;
+/*SELECT ALL FROM Visitas LIMIT 50;
 SELECT ALL FROM Visitas LIMIT 0;
 SELECT ALL FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left;
-SELECT DISTINCT left.codigo_cliente FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL;
+SELECT DISTINCT left.codigo_cliente FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL;*/
 /*SELECT left.codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL;*//*Esto va a tirar un error;*/
-SELECT DISTINCT codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL;
+/*SELECT DISTINCT codigo_cliente AS new_cod FROM (Persona LEFT JOIN Visitas ON codigo = codigo_cliente) AS left WHERE left.codigo_cliente <> NULL;*/

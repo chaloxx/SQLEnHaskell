@@ -1,10 +1,12 @@
+CREATE USER pablo alonso;
 SELECT USER pablo alonso;
+CREATE DATABASE Inmobiliaria;
 USE Inmobiliaria;
 
 DROP ALL TABLE;
 
 
-
+/*
 CREATE TABLE Poblacion(
   nombre_poblacion  String,
   n_habitantes      Int NULL,
@@ -114,9 +116,11 @@ CREATE TABLE Visitas (
   FOREIGN KEY (codigo_cliente) REFERENCE Cliente (codigo) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (codigo_inmueble) REFERENCE Inmueble (codigo) ON DELETE CASCADE ON UPDATE CASCADE
 );
+*/
 
 
-INSERT  Poblacion ("Rosario", 1500000);
+
+/*INSERT  Poblacion ("Rosario", 1500000);
 INSERT  Poblacion ("Casilda", 14000);
 INSERT  Poblacion ("Santa Fe", 500000);
 INSERT  Poblacion ("San Lorenzo", 400000);
@@ -254,4 +258,7 @@ INSERT  Visitas (1013, "Ros0002", 2014-02-02 10:00:00);
 INSERT  Visitas (1013, "Ros0003", 2014-02-03 10:00:00);
 INSERT  Visitas (1001, "Cas0002", 2014-03-01 10:00:00);
 INSERT  Visitas (1018, "Stf0001", 2014-11-06 10:00:00);
-INSERT  Visitas (1018, "Stf0001", 2014-11-08 10:00:00);
+INSERT  Visitas (1018, "Stf0001", 2014-11-08 10:00:00);*/
+
+
+/*Ejemplo para probar claves foráneas*/

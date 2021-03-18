@@ -233,16 +233,22 @@ fieldsOfTable n = Q(\c -> let keys = HM.keys $  (snd' c) HM.! n
 
 
 
-
+-- Recuperar contexto
 askContext :: Query Context
 askContext = Q(\c -> return $ Right(c,c))
 
+
+-- Recuperar entorno
 askEnv :: Query Env
 askEnv = Q(\c -> return $ Right (c,fst' c))
 
+
+-- Recuperar valores
 askVals :: Query (ContextFun Args)
 askVals = Q(\c -> return $ Right (c,snd' c))
 
+
+-- Recuperar tipos
 askTypes :: Query (ContextFun Type)
 askTypes = Q(\c -> return $ Right (c,trd' c))
 
@@ -286,18 +292,6 @@ ioEitherMapT f t = do l' <- ioEitherMapT f (left t)
                                (Z _ _ _) -> Z l' v r'
                                (P _ _ _) -> P l' v r'
 
-
--- Partir un árbol en 2  con transformaciones
-particionT2 :: (a -> Either c ()) -> (a -> b) -> AVL a -> (AVL c,AVL b)
-particionT2 p f E = (E,E)
-particionT2 p f t =  let  (l1,l2) = particionT2 p f (left t)
-                          (r1,r2) = particionT2 p f (right t)
-                          l = join l1 r1
-                          r = join l2 r2
-                          x = value t
-                      in  case p x of
-                            Left errorMsg  -> (pushL errorMsg l,r)
-                            _  -> ( l, pushL (f x) r)
 
 
 

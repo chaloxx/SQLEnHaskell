@@ -59,4 +59,5 @@ https://purelyfunctional.org/posts/2016-05-20-dynamic-loading-haskell-module.htm
 
 
 
- Falto implementar union, diferencia e intersección entre consultas.
+ Faltó implementar union, diferencia e intersección entre consultas.
+ Faltó implementar delete y update en cadena por clave foránea.
